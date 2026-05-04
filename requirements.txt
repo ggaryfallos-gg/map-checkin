@@ -1,5 +1,5 @@
 streamlit
-from streamlit_js_eval import get_geolocation
-from streamlit_folium import st_folium
+streamlit_js_eval
+streamlit_folium
 folium
 datetime
