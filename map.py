@@ -1,33 +1,28 @@
 import streamlit as st
-import pandas as pd
 import os
 from streamlit_js_eval import get_geolocation
 from streamlit_folium import st_folium
 import folium
+import pandas as pd
 from datetime import datetime
 
 # --- Configuration ---
-st.set_page_config(page_title="Logistics Check-in Terminal", layout="centered")
-DB_FILE = "logistics_checkin_database.xlsx"
+st.set_page_config(page_title="Logistics Check-in", layout="centered")
+DB_FILE = "checkin_log.txt"
 
-def save_to_excel(new_row):
-    """Saves check-in data to the local Excel repository using openpyxl."""
-    if os.path.exists(DB_FILE):
-        # Load existing data to append to it
-        df_existing = pd.read_excel(DB_FILE, engine='openpyxl')
-        df_final = pd.concat([df_existing, new_row], ignore_index=True)
-    else:
-        df_final = new_row
+def save_to_txt(timestamp, lat, lon):
+    """Appends data to a comma-separated TXT file."""
+    # Format: Timestamp, User, Latitude, Longitude
+    log_entry = f"{timestamp}, GG, {lat}, {lon}\n"
     
-    # Write to file with specific engine
-    with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
-        df_final.to_excel(writer, index=False, sheet_name='Check-in Logs')
+    with open(DB_FILE, "a", encoding="utf-8") as f:
+        f.write(log_entry)
 
 # --- UI Layout ---
-st.title("📍 Mobile Logistics Terminal")
-st.info("Direct-entry mode: Records GPS coordinates to repository.")
+st.title("📍 Mobile Check-in")
+st.markdown("---")
 
-# 1. Hardware Integration (GPS)
+# 1. GPS Acquisition
 location = get_geolocation()
 
 if location:
@@ -36,41 +31,36 @@ if location:
     
     # 2. Check-in Trigger
     if st.button("🚀 Confirm Check-in", use_container_width=True):
-        # Create professional data record
-        entry = pd.DataFrame([{
-            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "User": "GG",
-            "Latitude": lat,
-            "Longitude": lon,
-            "Status": "Verified"
-        }])
-        
-        save_to_excel(entry)
-        st.toast("Check-in successfully logged to Excel.", icon="✅")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        save_to_txt(now, lat, lon)
+        st.toast("Check-in logged to TXT repository.", icon="📝")
 
-    # 3. Visualization & Historical Data
+    # 3. Visualization from TXT
     if os.path.exists(DB_FILE):
-        df_history = pd.read_excel(DB_FILE, engine='openpyxl')
-        
-        if not df_history.empty:
-            st.subheader("Check-in Map")
+        # Read TXT into DataFrame for easy mapping/display
+        try:
+            df = pd.read_csv(DB_FILE, names=["Timestamp", "User", "Latitude", "Longitude"], skipinitialspace=True)
             
-            # Map centered on the most recent location
-            m = folium.Map(location=[lat, lon], zoom_start=14)
-            
-            # Populate Map with Pins from the Excel DB
-            for _, row in df_history.iterrows():
-                folium.Marker(
-                    [row['Latitude'], row['Longitude']],
-                    popup=f"Time: {row['Timestamp']}",
-                    tooltip=f"User: {row['User']}",
-                    icon=folium.Icon(color="blue", icon="info-sign")
-                ).add_to(m)
-            
-            st_folium(m, width="100%", height=400)
-            
-            # 4. Data Scannability
-            with st.expander("📊 Recent Logs"):
-                st.dataframe(df_history.tail(10), use_container_width=True)
+            if not df.empty:
+                st.subheader("Historical Visibility")
+                
+                # Map setup
+                m = folium.Map(location=[lat, lon], zoom_start=14)
+                
+                # Plot pins from TXT
+                for _, row in df.iterrows():
+                    folium.Marker(
+                        [row['Latitude'], row['Longitude']],
+                        popup=f"{row['Timestamp']}",
+                        icon=folium.Icon(color="green", icon="check", prefix="fa")
+                    ).add_to(m)
+                
+                st_folium(m, width="100%", height=400)
+                
+                # Scannable Logs
+                with st.expander("View Log History"):
+                    st.dataframe(df.tail(10), use_container_width=True)
+        except Exception as e:
+            st.error(f"Error reading log file: {e}")
 else:
-    st.warning("Waiting for GPS signal. Please allow location access on your Samsung S25 Ultra.")
+    st.info("Waiting for GPS signal from S25 Ultra...")
