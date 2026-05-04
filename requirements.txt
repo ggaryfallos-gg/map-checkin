@@ -3,3 +3,5 @@ streamlit_js_eval
 streamlit_folium
 folium
 datetime
+pandas
+os
