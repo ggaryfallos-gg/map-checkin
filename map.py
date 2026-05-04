@@ -6,38 +6,37 @@ from streamlit_folium import st_folium
 import folium
 from datetime import datetime
 
-# --- Configuration & Styling ---
+# --- Configuration ---
 st.set_page_config(page_title="Logistics Check-in Terminal", layout="centered")
 DB_FILE = "logistics_checkin_database.xlsx"
 
 def save_to_excel(new_row):
-    """Handles Excel I/O with high data integrity."""
+    """Saves check-in data to the local Excel repository using openpyxl."""
     if os.path.exists(DB_FILE):
-        df = pd.read_excel(DB_FILE)
-        df = pd.concat([df, new_row], ignore_index=True)
+        # Load existing data to append to it
+        df_existing = pd.read_excel(DB_FILE, engine='openpyxl')
+        df_final = pd.concat([df_existing, new_row], ignore_index=True)
     else:
-        df = new_row
+        df_final = new_row
     
-    # Save with professional formatting (Engine: openpyxl)
+    # Write to file with specific engine
     with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Check-in Logs')
+        df_final.to_excel(writer, index=False, sheet_name='Check-in Logs')
 
-# --- UI Header ---
-st.title("📍 Executive Check-in")
-st.markdown("---")
+# --- UI Layout ---
+st.title("📍 Mobile Logistics Terminal")
+st.info("Direct-entry mode: Records GPS coordinates to repository.")
 
-# 1. Location Acquisition
+# 1. Hardware Integration (GPS)
 location = get_geolocation()
 
 if location:
     lat = location['coords']['latitude']
     lon = location['coords']['longitude']
     
-    # 2. Check-in Interface
-    st.success("GPS Signal: High Accuracy")
-    
+    # 2. Check-in Trigger
     if st.button("🚀 Confirm Check-in", use_container_width=True):
-        # Create Data Entry
+        # Create professional data record
         entry = pd.DataFrame([{
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "User": "GG",
@@ -47,32 +46,31 @@ if location:
         }])
         
         save_to_excel(entry)
-        st.toast("Check-in saved to local repository!", icon="💾")
+        st.toast("Check-in successfully logged to Excel.", icon="✅")
 
-    # 3. Dynamic Visualization
+    # 3. Visualization & Historical Data
     if os.path.exists(DB_FILE):
-        st.subheader("Historical Visibility")
-        
-        # Load data for mapping
-        df_history = pd.read_excel(DB_FILE)
+        df_history = pd.read_excel(DB_FILE, engine='openpyxl')
         
         if not df_history.empty:
-            # Map centered on current location
+            st.subheader("Check-in Map")
+            
+            # Map centered on the most recent location
             m = folium.Map(location=[lat, lon], zoom_start=14)
             
-            # Add all historical pins
+            # Populate Map with Pins from the Excel DB
             for _, row in df_history.iterrows():
                 folium.Marker(
                     [row['Latitude'], row['Longitude']],
                     popup=f"Time: {row['Timestamp']}",
-                    icon=folium.Icon(color="blue", icon="location-dot", prefix="fa")
+                    tooltip=f"User: {row['User']}",
+                    icon=folium.Icon(color="blue", icon="info-sign")
                 ).add_to(m)
             
-            st_folium(m, width="100%", height=450)
+            st_folium(m, width="100%", height=400)
             
-            # 4. Efficiency Metrics (Summary)
-            with st.expander("Database Statistics"):
-                st.write(f"Total entries logged: **{len(df_history)}**")
-                st.dataframe(df_history.tail(5), use_container_width=True)
+            # 4. Data Scannability
+            with st.expander("📊 Recent Logs"):
+                st.dataframe(df_history.tail(10), use_container_width=True)
 else:
-    st.info("Awaiting GPS coordinates. Ensure Location Services are active on your S25 Ultra.")
+    st.warning("Waiting for GPS signal. Please allow location access on your Samsung S25 Ultra.")
