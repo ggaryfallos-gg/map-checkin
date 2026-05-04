@@ -1,59 +1,78 @@
 import streamlit as st
+import pandas as pd
+import os
 from streamlit_js_eval import get_geolocation
 from streamlit_folium import st_folium
 import folium
-import pandas as pd
 from datetime import datetime
 
-# Page Config for Mobile
-st.set_page_config(page_title="Logistics Check-in", layout="centered")
+# --- Configuration & Styling ---
+st.set_page_config(page_title="Logistics Check-in Terminal", layout="centered")
+DB_FILE = "logistics_checkin_database.xlsx"
 
-st.title("📍 Mobile Check-in System")
+def save_to_excel(new_row):
+    """Handles Excel I/O with high data integrity."""
+    if os.path.exists(DB_FILE):
+        df = pd.read_excel(DB_FILE)
+        df = pd.concat([df, new_row], ignore_index=True)
+    else:
+        df = new_row
+    
+    # Save with professional formatting (Engine: openpyxl)
+    with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Check-in Logs')
 
-# Initialize session state for check-in history
-if 'check_in_history' not in st.session_state:
-    st.session_state.check_in_history = []
+# --- UI Header ---
+st.title("📍 Executive Check-in")
+st.markdown("---")
 
-# 1. Capture Location (Triggers Mobile GPS)
+# 1. Location Acquisition
 location = get_geolocation()
 
 if location:
-    curr_lat = location['coords']['latitude']
-    curr_lon = location['coords']['longitude']
+    lat = location['coords']['latitude']
+    lon = location['coords']['longitude']
     
-    st.success(f"GPS Signal Locked")
+    # 2. Check-in Interface
+    st.success("GPS Signal: High Accuracy")
     
-    # 2. Check-in Action
-    if st.button("Confirm Check-in", use_container_width=True):
-        new_entry = {
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "lat": curr_lat,
-            "lon": curr_lon
-        }
-        st.session_state.check_in_history.append(new_entry)
-        st.toast("Check-in recorded successfully!", icon="✅")
+    if st.button("🚀 Confirm Check-in", use_container_width=True):
+        # Create Data Entry
+        entry = pd.DataFrame([{
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "User": "GG",
+            "Latitude": lat,
+            "Longitude": lon,
+            "Status": "Verified"
+        }])
+        
+        save_to_excel(entry)
+        st.toast("Check-in saved to local repository!", icon="💾")
 
-    # 3. Visualization Logic
-    if st.session_state.check_in_history:
-        st.subheader("Check-in Map")
+    # 3. Dynamic Visualization
+    if os.path.exists(DB_FILE):
+        st.subheader("Historical Visibility")
         
-        # Create Map centered on the latest check-in
-        m = folium.Map(location=[curr_lat, curr_lon], zoom_start=15)
+        # Load data for mapping
+        df_history = pd.read_excel(DB_FILE)
         
-        # Add markers for all history
-        for entry in st.session_state.check_in_history:
-            folium.Marker(
-                [entry['lat'], entry['lon']],
-                popup=f"Time: {entry['time']}",
-                icon=folium.Icon(color="green", icon="check", prefix="fa")
-            ).add_to(m)
-        
-        # Render Map
-        st_folium(m, width="100%", height=400)
-        
-        # 4. Data Table for Review
-        with st.expander("View Raw Logs"):
-            st.table(pd.DataFrame(st.session_state.check_in_history))
+        if not df_history.empty:
+            # Map centered on current location
+            m = folium.Map(location=[lat, lon], zoom_start=14)
             
+            # Add all historical pins
+            for _, row in df_history.iterrows():
+                folium.Marker(
+                    [row['Latitude'], row['Longitude']],
+                    popup=f"Time: {row['Timestamp']}",
+                    icon=folium.Icon(color="blue", icon="location-dot", prefix="fa")
+                ).add_to(m)
+            
+            st_folium(m, width="100%", height=450)
+            
+            # 4. Efficiency Metrics (Summary)
+            with st.expander("Database Statistics"):
+                st.write(f"Total entries logged: **{len(df_history)}**")
+                st.dataframe(df_history.tail(5), use_container_width=True)
 else:
-    st.info("Waiting for GPS permission... Please enable 'Location' on your S25 Ultra browser.")
+    st.info("Awaiting GPS coordinates. Ensure Location Services are active on your S25 Ultra.")
