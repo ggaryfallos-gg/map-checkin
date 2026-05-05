@@ -76,6 +76,16 @@ def load_and_optimize():
     # 1. Fetch live data
     shipments = conn.read(spreadsheet=SHIPMENTS_URL, ttl=600)
     
+    # MATH SANITIZATION: Force strict mathematical types for all payload columns
+    weight_columns = ['Total KG', 'Unpainted', 'White', 'Colored', 'Accessories']
+    for col in weight_columns:
+        if col in shipments.columns:
+            # Strip European commas and spaces, then cast to float. Replace blank cells with 0.0
+            shipments[col] = pd.to_numeric(
+                shipments[col].astype(str).str.replace(',', '').str.replace(' ', ''), 
+                errors='coerce'
+            ).fillna(0.0)
+    
     # 2. Dynamic Fleet Extraction
     unique_plates = shipments['Truck License Plate'].dropna().unique()
     plates = pd.DataFrame({'PLATE NUMBER': unique_plates})
@@ -90,7 +100,7 @@ def load_and_optimize():
         coords_db = conn.read(spreadsheet=COORDS_URL, ttl=600)
         coords_db['City'] = coords_db['City'].astype(str).str.strip().str.upper()
         
-        # EFFICIENCY FIX: Force strict numeric types to prevent Folium crashes from hidden Google Sheet strings
+        # Force strict numeric types for map rendering
         coords_db['Latitude'] = pd.to_numeric(coords_db['Latitude'], errors='coerce')
         coords_db['Longitude'] = pd.to_numeric(coords_db['Longitude'], errors='coerce')
     except Exception:
@@ -305,6 +315,7 @@ else:
         selected_cust = st.selectbox("Select Unloading Target", cust_list)
         cust_data = user_data[user_data['Name'] == selected_cust]
         
+        # Calculating payload natively
         total_kg = cust_data['Total KG'].sum()
         profiles = cust_data[['Unpainted', 'White', 'Colored']].sum().sum()
         accs = cust_data['Accessories'].sum()
