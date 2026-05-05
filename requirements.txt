@@ -5,3 +5,4 @@ folium
 streamlit-folium
 streamlit-js-eval
 geopy
+st-gsheets-connection
