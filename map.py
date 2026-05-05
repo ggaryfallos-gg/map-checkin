@@ -18,7 +18,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # Define Database Endpoints
 SHIPMENTS_URL = "https://docs.google.com/spreadsheets/d/1ZIZgYar_VcrhqzpdWRTKwmF2WmumU240DUD3zSsU8xc/edit"
 COORDS_URL = "https://docs.google.com/spreadsheets/d/1u1HKa5P97ywlMZM0tCyPgRGmMf0fgVnQZU_rpVnhRZU/edit"
-LOG_URL = "https://docs.google.com/spreadsheets/d/1NSB1XvK8PX0DOAK5OgjDGQxvHpdL1jVSR_nzovJfjuM/edit" 
+LOG_URL = "https://docs.google.com/spreadsheets/d/1NSB1XvK8PX0DOAK5OgjDGQxvHpdL1jVSR_nzovJfjuM/edit?usp=sharing" 
 
 # --- STATE MANAGEMENT ---
 if 'user_plate' not in st.session_state:
@@ -70,7 +70,7 @@ def auto_heal_coordinates_cloud(shipments_df, coords_df):
             
     return coords_df
 
-@st.cache_data(ttl=600) # Cache clears every 10 mins to pull fresh cloud data
+@st.cache_data(ttl=600)
 def load_and_optimize():
     """Main data loading pipeline reading directly from Google Sheets."""
     # 1. Fetch live data
@@ -89,6 +89,10 @@ def load_and_optimize():
     try:
         coords_db = conn.read(spreadsheet=COORDS_URL, ttl=600)
         coords_db['City'] = coords_db['City'].astype(str).str.strip().str.upper()
+        
+        # EFFICIENCY FIX: Force strict numeric types to prevent Folium crashes from hidden Google Sheet strings
+        coords_db['Latitude'] = pd.to_numeric(coords_db['Latitude'], errors='coerce')
+        coords_db['Longitude'] = pd.to_numeric(coords_db['Longitude'], errors='coerce')
     except Exception:
         coords_db = pd.DataFrame(columns=['City', 'Latitude', 'Longitude'])
     
@@ -136,9 +140,6 @@ def calculate_optimal_route(start_coords, destinations_df):
 
 # --- EXECUTE DATA PIPELINE ---
 try:
-    if LOG_URL == "YOUR_NEW_CHECKIN_LOG_SHEET_URL_HERE":
-        st.error("SYSTEM HALT: You must add your LOG_URL at the top of the script.")
-        st.stop()
     plate_info, shipments_df = load_and_optimize()
 except Exception as e:
     st.error(f"Cloud Connection Error. Ensure your Secrets are configured. Details: {e}")
@@ -209,8 +210,12 @@ else:
             
         try:
             # Pull live check-in markers from cloud
-            log_df = conn.read(spreadsheet=LOG_URL, ttl=0) # ttl=0 means DO NOT CACHE, get real-time
+            log_df = conn.read(spreadsheet=LOG_URL, ttl=0)
             if not log_df.empty:
+                # Force numeric conversion for log coordinates to prevent secondary crashes
+                log_df['Checkin_Lat'] = pd.to_numeric(log_df['Checkin_Lat'], errors='coerce')
+                log_df['Checkin_Lon'] = pd.to_numeric(log_df['Checkin_Lon'], errors='coerce')
+                
                 truck_log = log_df[log_df['Plate'] == st.session_state.display_plate]
                 for _, row in truck_log.iterrows():
                     if pd.notna(row.get('Checkin_Lat')) and pd.notna(row.get('Checkin_Lon')):
