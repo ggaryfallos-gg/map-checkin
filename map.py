@@ -122,7 +122,7 @@ if st.session_state.user_plate is None:
     
     sel = st.selectbox("Active Fleet Vehicles", plate_info['Label'])
     
-    if st.button("Initialize Vehicle Session", type="primary", use_container_width=True):
+    if st.button("Initialize Vehicle Session", type="primary", width="stretch"):
         row = plate_info[plate_info['Label'] == sel].iloc[0]
         st.session_state.user_plate = row['Plate_Clean']
         st.session_state.display_plate = row['PLATE NUMBER']
@@ -134,7 +134,7 @@ else:
     with st.sidebar:
         st.header("Terminal Control")
         st.success(f"Active: **{st.session_state.display_plate}**")
-        if st.button("🔄 Swap Vehicle / Logout", use_container_width=True):
+        if st.button("🔄 Swap Vehicle / Logout", width="stretch"):
             for key in ['user_plate', 'display_plate', 'last_finish_time', 'start_time']:
                 st.session_state[key] = None
             st.rerun()
@@ -215,7 +215,7 @@ else:
         
         col_start, col_end = st.columns(2)
         
-        if col_start.button("▶️ Record Arrival (Start Unloading)", use_container_width=True):
+        if col_start.button("▶️ Record Arrival (Start Unloading)", width="stretch"):
             now = datetime.now()
             st.session_state.start_time = now
             
@@ -227,7 +227,7 @@ else:
                 st.session_state.current_transit_mins = 0
                 st.toast("Initial arrival logged.", icon="🏁")
 
-        if col_end.button("⏹️ Record Departure (Finish Unloading)", type="primary", use_container_width=True):
+        if col_end.button("⏹️ Record Departure (Finish Unloading)", type="primary", width="stretch"):
             if st.session_state.start_time is not None:
                 now = datetime.now()
                 unload_dur = (now - st.session_state.start_time).total_seconds() / 60
@@ -276,7 +276,7 @@ else:
                 ec3.metric("Profiles Delivered", f"{total_prof_delivered:,.0f} KG")
                 
                 st.caption("Raw Delivery Ledger")
-                st.dataframe(log_df.sort_values(by="Timestamp", ascending=False).head(10), use_container_width=True)
+                st.dataframe(log_df.sort_values(by="Timestamp", ascending=False).head(10), width="stretch")
             else:
                 st.info("Log repository is empty. Complete a delivery to generate analytics.")
         except Exception as e:
