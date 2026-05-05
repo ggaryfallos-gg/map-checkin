@@ -1,8 +1,7 @@
 streamlit
 pandas
-os
-streamlit_js_eval
-streamlit_folium
-folium
-datetime
 openpyxl
+streamlit-js-eval
+streamlit-folium
+folium
+geopy
