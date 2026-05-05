@@ -34,7 +34,7 @@ if 'current_transit_mins' not in st.session_state:
 
 # --- DATA PIPELINE & CLOUD AUTO-HEALING ---
 def auto_heal_coordinates_cloud(shipments_df, coords_df):
-    """Fetches missing coordinates and pushes them PERMANENTLY to Google Sheets."""
+    """Background fallback healer (Silently fetches max 3 nodes to prevent timeouts)."""
     unique_route_cities = shipments_df['City_Clean'].dropna().unique()
     existing_cities = coords_df['City'].dropna().unique()
     
@@ -64,7 +64,6 @@ def auto_heal_coordinates_cloud(shipments_df, coords_df):
             updated_coords = pd.concat([coords_df, new_df], ignore_index=True)
             updated_coords = updated_coords.dropna(subset=['Latitude']).drop_duplicates(subset=['City'], keep='last')
             
-            # Write back to Google Sheets permanently
             conn.update(spreadsheet=COORDS_URL, data=updated_coords)
             return updated_coords
             
@@ -73,20 +72,18 @@ def auto_heal_coordinates_cloud(shipments_df, coords_df):
 @st.cache_data(ttl=600)
 def load_and_optimize():
     """Main data loading pipeline reading directly from Google Sheets."""
-    # 1. Fetch live data
     shipments = conn.read(spreadsheet=SHIPMENTS_URL, ttl=600)
     
-    # MATH SANITIZATION: Force strict mathematical types for all payload columns
+    # MATH SANITIZATION
     weight_columns = ['Total KG', 'Unpainted', 'White', 'Colored', 'Accessories']
     for col in weight_columns:
         if col in shipments.columns:
-            # Strip European commas and spaces, then cast to float. Replace blank cells with 0.0
             shipments[col] = pd.to_numeric(
                 shipments[col].astype(str).str.replace(',', '').str.replace(' ', ''), 
                 errors='coerce'
             ).fillna(0.0)
     
-    # 2. Dynamic Fleet Extraction
+    # Dynamic Fleet Extraction
     unique_plates = shipments['Truck License Plate'].dropna().unique()
     plates = pd.DataFrame({'PLATE NUMBER': unique_plates})
 
@@ -95,24 +92,18 @@ def load_and_optimize():
     plates['Plate_Clean'] = plates['PLATE NUMBER'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
     shipments['City_Clean'] = shipments['City'].astype(str).str.strip().str.upper()
     
-    # Load Coordinates DB from Cloud
+    # Load Coordinates DB
     try:
         coords_db = conn.read(spreadsheet=COORDS_URL, ttl=600)
         coords_db['City'] = coords_db['City'].astype(str).str.strip().str.upper()
-        
-        # Force strict numeric types for map rendering
         coords_db['Latitude'] = pd.to_numeric(coords_db['Latitude'], errors='coerce')
         coords_db['Longitude'] = pd.to_numeric(coords_db['Longitude'], errors='coerce')
     except Exception:
         coords_db = pd.DataFrame(columns=['City', 'Latitude', 'Longitude'])
     
-    # Trigger Healer
     coords_db = auto_heal_coordinates_cloud(shipments, coords_db)
-    
-    # Relational Merge
     shipments = pd.merge(shipments, coords_db, left_on='City_Clean', right_on='City', how='left')
     
-    # Analytics for Sorting
     counts = shipments.groupby('Plate_Clean')['City_Clean'].nunique().reset_index(name='Dests')
     merged_plates = pd.merge(plates, counts, on='Plate_Clean', how='left').fillna(0)
     merged_plates = merged_plates.sort_values(by='Dests', ascending=False)
@@ -122,7 +113,6 @@ def load_and_optimize():
 
 # --- ROUTE OPTIMIZATION ALGORITHM (TSP) ---
 def calculate_optimal_route(start_coords, destinations_df):
-    """Greedy Nearest-Neighbor algorithm for instant route optimization."""
     unvisited = destinations_df.copy().dropna(subset=['Latitude', 'Longitude'])
     if unvisited.empty:
         return unvisited, 0
@@ -174,10 +164,69 @@ else:
     with st.sidebar:
         st.header("Terminal Control")
         st.success(f"Active: **{st.session_state.display_plate}**")
+        
         if st.button("🔄 Swap Vehicle / Logout", width="stretch"):
             for key in ['user_plate', 'display_plate', 'last_finish_time', 'start_time']:
                 st.session_state[key] = None
             st.rerun()
+            
+        st.markdown("---")
+        st.subheader("Database Management")
+        
+        # EXPLICIT MANUAL OVERRIDE SYNC BUTTON
+        if st.button("🌐 Force Sync Coordinates", width="stretch"):
+            with st.spinner("Bypassing cache. Scanning Cloud Database..."):
+                try:
+                    temp_shipments = conn.read(spreadsheet=SHIPMENTS_URL, ttl=0)
+                    temp_coords = conn.read(spreadsheet=COORDS_URL, ttl=0)
+                    
+                    temp_shipments['City_Clean'] = temp_shipments['City'].astype(str).str.strip().str.upper()
+                    temp_coords['City'] = temp_coords['City'].astype(str).str.strip().str.upper()
+                    
+                    unique_route_cities = temp_shipments['City_Clean'].dropna().unique()
+                    existing_cities = temp_coords['City'].dropna().unique()
+                    
+                    missing_cities = [c for c in unique_route_cities if c not in existing_cities]
+                    nan_cities = temp_coords[pd.to_numeric(temp_coords['Latitude'], errors='coerce').isna()]['City'].tolist()
+                    
+                    cities_to_fetch = list(set(missing_cities + nan_cities))
+                    
+                    if cities_to_fetch:
+                        st.info(f"Targeting {len(cities_to_fetch)} unmapped nodes. Initializing API sequence...")
+                        geolocator = Nominatim(user_agent="alumil_logistics_explicit_sync")
+                        new_data = []
+                        
+                        progress_bar = st.progress(0)
+                        
+                        for i, city in enumerate(cities_to_fetch):
+                            try:
+                                loc = geolocator.geocode(f"{city}, Greece", timeout=5)
+                                if loc:
+                                    new_data.append({"City": city, "Latitude": loc.latitude, "Longitude": loc.longitude})
+                                time.sleep(1) # Strict Nominatim policy
+                            except Exception:
+                                pass
+                            progress_bar.progress((i + 1) / len(cities_to_fetch))
+                        
+                        if new_data:
+                            new_df = pd.DataFrame(new_data)
+                            updated_coords = pd.concat([temp_coords, new_df], ignore_index=True)
+                            updated_coords = updated_coords.dropna(subset=['Latitude']).drop_duplicates(subset=['City'], keep='last')
+                            
+                            conn.update(spreadsheet=COORDS_URL, data=updated_coords)
+                            st.success(f"Successfully injected {len(new_data)} geographic signatures to Cloud Database.")
+                        else:
+                            st.warning("API Timeout or invalid city names. Try again later.")
+                    else:
+                        st.success("All geographic nodes are already 100% synchronized.")
+                        
+                    # Purge cache and force hard reload
+                    load_and_optimize.clear()
+                    time.sleep(1.5)
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Sync failed: {e}")
             
     user_data = shipments_df[shipments_df['Plate_Clean'] == st.session_state.user_plate]
     
@@ -209,7 +258,7 @@ else:
                 missing_cities.append(row['City_Clean'])
                 
         if missing_cities:
-            st.warning(f"⚠️ Missing coordinates for: {', '.join(missing_cities)}. The cloud background healer will resolve these.")
+            st.warning(f"⚠️ Missing coordinates for: {', '.join(missing_cities)}. Click 'Force Sync Coordinates' in the sidebar to resolve instantly.")
             
         if curr_lat and curr_lon:
             folium.Marker(
@@ -219,10 +268,8 @@ else:
             ).add_to(m)
             
         try:
-            # Pull live check-in markers from cloud
             log_df = conn.read(spreadsheet=LOG_URL, ttl=0)
             if not log_df.empty:
-                # Force numeric conversion for log coordinates to prevent secondary crashes
                 log_df['Checkin_Lat'] = pd.to_numeric(log_df['Checkin_Lat'], errors='coerce')
                 log_df['Checkin_Lon'] = pd.to_numeric(log_df['Checkin_Lon'], errors='coerce')
                 
@@ -315,7 +362,6 @@ else:
         selected_cust = st.selectbox("Select Unloading Target", cust_list)
         cust_data = user_data[user_data['Name'] == selected_cust]
         
-        # Calculating payload natively
         total_kg = cust_data['Total KG'].sum()
         profiles = cust_data[['Unpainted', 'White', 'Colored']].sum().sum()
         accs = cust_data['Accessories'].sum()
@@ -360,7 +406,6 @@ else:
                 }])
                 
                 try:
-                    # Cloud Write Operation
                     existing_log = conn.read(spreadsheet=LOG_URL, ttl=0)
                     updated_log = pd.concat([existing_log, new_record], ignore_index=True)
                     conn.update(spreadsheet=LOG_URL, data=updated_log)
