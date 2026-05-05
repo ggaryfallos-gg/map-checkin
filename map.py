@@ -34,51 +34,55 @@ if 'start_time' not in st.session_state:
 if 'current_transit_mins' not in st.session_state:
     st.session_state.current_transit_mins = 0
 
-# --- DATA PIPELINE & AUTO-HEALING ---
-def auto_heal_coordinates(shipments_df, coords_df):
-    """Dynamically fetches missing coordinates and permanently caches them."""
-    unique_route_cities = shipments_df['City_Clean'].unique()
-    existing_cities = coords_df['City'].unique()
+# --- SILENT DATA PIPELINE & AUTO-HEALING ---
+def auto_heal_coordinates_silent(shipments_df, coords_df):
+    """
+    Silently fetches missing coordinates in the background.
+    NO Streamlit UI elements (st.warning, st.toast) are allowed here
+    because this runs inside a cached function.
+    """
+    unique_route_cities = shipments_df['City_Clean'].dropna().unique()
+    existing_cities = coords_df['City'].dropna().unique()
     
-    # Identify cities missing from our local DB
     missing_cities = [c for c in unique_route_cities if c not in existing_cities]
-    
-    # Also check if any existing cities have NaN coordinates
     nan_cities = coords_df[coords_df['Latitude'].isna()]['City'].tolist()
+    
     cities_to_fetch = list(set(missing_cities + nan_cities))
     
     if cities_to_fetch:
+        # Micro-batch to prevent long load times
+        MAX_BATCH_SIZE = 3 
+        cities_to_fetch = cities_to_fetch[:MAX_BATCH_SIZE]
+        
         geolocator = Nominatim(user_agent="alumil_logistics_autoheal")
         new_data = []
         
-        with st.spinner(f"Auto-resolving {len(cities_to_fetch)} new routing nodes over API..."):
-            for city in cities_to_fetch:
-                try:
-                    # Append Greece to ensure local routing accuracy
-                    loc = geolocator.geocode(f"{city}, Greece", timeout=5)
-                    if loc:
-                        new_data.append({"City": city, "Latitude": loc.latitude, "Longitude": loc.longitude})
-                    time.sleep(1) # Respect Nominatim rate limits
-                except Exception:
-                    pass # Ignore timeouts, will retry on next session reboot
+        for city in cities_to_fetch:
+            try:
+                loc = geolocator.geocode(f"{city}, Greece", timeout=3)
+                if loc:
+                    new_data.append({"City": city, "Latitude": loc.latitude, "Longitude": loc.longitude})
+                time.sleep(1) # Strict Nominatim policy
+            except Exception:
+                pass # Fail silently
         
         if new_data:
             new_df = pd.DataFrame(new_data)
             updated_coords = pd.concat([coords_df, new_df], ignore_index=True)
             updated_coords = updated_coords.dropna(subset=['Latitude']).drop_duplicates(subset=['City'], keep='last')
             
-            # Save permanently to the local repository
             updated_coords.to_excel(COORDS_FILE, index=False, engine='openpyxl')
-            st.toast(f"Successfully cached {len(new_data)} new cities to database.", icon="💾")
             return updated_coords
             
     return coords_df
 
 @st.cache_data
 def load_and_optimize():
+    """Main data loading pipeline with caching."""
     plates = pd.read_excel('PLATES.xlsx', engine='openpyxl')
     shipments = pd.read_excel('shipments.xlsx', engine='openpyxl')
     
+    # Deep Clean
     shipments['Plate_Clean'] = shipments['Truck License Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
     plates['Plate_Clean'] = plates['PLATE NUMBER'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
     shipments['City_Clean'] = shipments['City'].astype(str).str.strip().str.upper()
@@ -90,12 +94,13 @@ def load_and_optimize():
     else:
         coords_db = pd.DataFrame(columns=['City', 'Latitude', 'Longitude'])
     
-    # Trigger Dynamic Auto-Healing
-    coords_db = auto_heal_coordinates(shipments, coords_db)
+    # Trigger Silent Auto-Healing
+    coords_db = auto_heal_coordinates_silent(shipments, coords_db)
     
     # Relational Merge
     shipments = pd.merge(shipments, coords_db, left_on='City_Clean', right_on='City', how='left')
     
+    # Analytics for Sorting
     counts = shipments.groupby('Plate_Clean')['City_Clean'].nunique().reset_index(name='Dests')
     merged_plates = pd.merge(plates, counts, on='Plate_Clean', how='left').fillna(0)
     merged_plates = merged_plates.sort_values(by='Dests', ascending=False)
@@ -103,6 +108,7 @@ def load_and_optimize():
     
     return merged_plates, shipments
 
+# Execute Data Pipeline
 try:
     plate_info, shipments_df = load_and_optimize()
 except Exception as e:
@@ -135,6 +141,7 @@ else:
             
     user_data = shipments_df[shipments_df['Plate_Clean'] == st.session_state.user_plate]
     
+    # Global GPS Capture
     gps = get_geolocation()
     curr_lat, curr_lon = None, None
     if gps and 'coords' in gps:
@@ -161,8 +168,9 @@ else:
             else:
                 missing_cities.append(row['City_Clean'])
                 
+        # Move the warning OUTSIDE the cached function
         if missing_cities:
-            st.warning(f"⚠️ API Timeout for: {', '.join(missing_cities)}. The system will attempt to resolve them on next reboot.")
+            st.warning(f"⚠️ Missing coordinates for: {', '.join(missing_cities)}. The background healer will fetch these gradually.")
             
         if curr_lat and curr_lon:
             folium.Marker(

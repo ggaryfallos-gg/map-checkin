@@ -5,3 +5,5 @@ streamlit-js-eval
 streamlit-folium
 folium
 geopy
+os
+time
