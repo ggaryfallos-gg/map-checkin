@@ -9,13 +9,11 @@ from datetime import datetime
 import time
 from streamlit_gsheets import GSheetsConnection
 
-# --- APP CONFIGURATION & CLOUD DB LINKS ---
+# --- APP CONFIGURATION ---
 st.set_page_config(page_title="Executive Logistics Hub", layout="wide", initial_sidebar_state="expanded")
 
-# Initialize Cloud Connection using Service Account Secrets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Define Database Endpoints (Full Edit URLs)
 SHIPMENTS_URL = "https://docs.google.com/spreadsheets/d/1ZIZgYar_VcrhqzpdWRTKwmF2WmumU240DUD3zSsU8xc/edit"
 COORDS_URL = "https://docs.google.com/spreadsheets/d/1u1HKa5P97ywlMZM0tCyPgRGmMf0fgVnQZU_rpVnhRZU/edit"
 LOG_URL = "https://docs.google.com/spreadsheets/d/1NSB1XvK8PX0DOAK5OgjDGQxvHpdL1jVSR_nzovJfjuM/edit" 
@@ -25,286 +23,157 @@ if 'user_plate' not in st.session_state:
     st.session_state.user_plate = None
 if 'display_plate' not in st.session_state:
     st.session_state.display_plate = None
-if 'last_finish_time' not in st.session_state:
-    st.session_state.last_finish_time = None 
 if 'start_time' not in st.session_state:
     st.session_state.start_time = None
-if 'current_transit_mins' not in st.session_state:
-    st.session_state.current_transit_mins = 0
 
-# --- DATA PIPELINE & CLOUD AUTO-HEALING ---
-def auto_heal_coordinates_cloud(shipments_df, coords_df):
-    """Background fallback healer (Silently fetches max 3 nodes to prevent timeouts)."""
-    unique_route_cities = shipments_df['City_Clean'].dropna().unique()
-    existing_cities = coords_df['City'].dropna().unique()
+# --- ROBUST NUMERIC CLEANER ---
+def clean_sheet_numeric(series):
+    """
+    Handles Greek/European formatting issues.
+    Converts '1.200,50' or '1,200.50' correctly to 1200.5
+    """
+    s = series.astype(str).str.replace(' ', '', regex=False)
     
-    missing_cities = [c for c in unique_route_cities if c not in existing_cities]
-    nan_cities = coords_df[coords_df['Latitude'].isna()]['City'].tolist()
-    
-    cities_to_fetch = list(set(missing_cities + nan_cities))
-    
-    if cities_to_fetch:
-        MAX_BATCH_SIZE = 3 
-        cities_to_fetch = cities_to_fetch[:MAX_BATCH_SIZE]
-        
-        geolocator = Nominatim(user_agent="alumil_logistics_autoheal")
-        new_data = []
-        
-        for city in cities_to_fetch:
-            try:
-                loc = geolocator.geocode(f"{city}, Greece", timeout=3)
-                if loc:
-                    new_data.append({"City": city, "Latitude": loc.latitude, "Longitude": loc.longitude})
-                time.sleep(1) 
-            except Exception:
-                pass 
-        
-        if new_data:
-            new_df = pd.DataFrame(new_data)
-            updated_coords = pd.concat([coords_df, new_df], ignore_index=True)
-            updated_coords = updated_coords.dropna(subset=['Latitude']).drop_duplicates(subset=['City'], keep='last')
-            
-            # Write back to Google Sheets (CRUD)
-            conn.update(spreadsheet=COORDS_URL, data=updated_coords)
-            return updated_coords
-            
-    return coords_df
+    # If there's a comma AND a dot (e.g. 1.200,50)
+    # We assume the last one is the decimal separator
+    def parse_mixed(val):
+        if not val or val == 'nan': return 0.0
+        # Remove thousands separator (assuming it's the first one found)
+        if ',' in val and '.' in val:
+            if val.find('.') < val.find(','): # 1.200,50
+                val = val.replace('.', '').replace(',', '.')
+            else: # 1,200.50
+                val = val.replace(',', '')
+        # Handle single separator cases
+        elif ',' in val: # 1200,50 -> 1200.50
+            val = val.replace(',', '.')
+        try:
+            return float(val)
+        except:
+            return 0.0
 
-@st.cache_data(ttl=600)
-def load_and_optimize():
-    """Main data loading pipeline reading directly from Google Sheets."""
-    # 1. Fetch live data
-    shipments = conn.read(spreadsheet=SHIPMENTS_URL, ttl=600)
-    
-    # MATH SANITIZATION: Prevents f-string ValueErrors
-    weight_columns = ['Total KG', 'Unpainted', 'White', 'Colored', 'Accessories']
-    for col in weight_columns:
-        if col in shipments.columns:
-            shipments[col] = pd.to_numeric(
-                shipments[col].astype(str).str.replace(',', '').str.replace(' ', ''), 
-                errors='coerce'
-            ).fillna(0.0)
-    
-    # Dynamic Fleet Extraction
-    unique_plates = shipments['Truck License Plate'].dropna().unique()
-    plates = pd.DataFrame({'PLATE NUMBER': unique_plates})
+    return s.apply(parse_mixed)
 
-    # Deep Clean
+# --- DATA PIPELINE ---
+@st.cache_data(ttl=300)
+def load_and_fix_data():
+    shipments = conn.read(spreadsheet=SHIPMENTS_URL, ttl=300)
+    
     shipments['Plate_Clean'] = shipments['Truck License Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
-    plates['Plate_Clean'] = plates['PLATE NUMBER'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
     shipments['City_Clean'] = shipments['City'].astype(str).str.strip().str.upper()
     
-    # Load Coordinates DB
+    # Applying the Robust Cleaner to weight columns
+    weight_cols = ['Total KG', 'Unpainted', 'White', 'Colored', 'Accessories']
+    for col in weight_cols:
+        if col in shipments.columns:
+            shipments[col] = clean_sheet_numeric(shipments[col])
+            
     try:
-        coords_db = conn.read(spreadsheet=COORDS_URL, ttl=600)
+        coords_db = conn.read(spreadsheet=COORDS_URL, ttl=300)
         coords_db['City'] = coords_db['City'].astype(str).str.strip().str.upper()
         coords_db['Latitude'] = pd.to_numeric(coords_db['Latitude'], errors='coerce')
         coords_db['Longitude'] = pd.to_numeric(coords_db['Longitude'], errors='coerce')
+        coords_db = coords_db.drop_duplicates(subset=['City'], keep='last').dropna(subset=['Latitude'])
     except Exception:
         coords_db = pd.DataFrame(columns=['City', 'Latitude', 'Longitude'])
     
-    # Background Healer
-    coords_db = auto_heal_coordinates_cloud(shipments, coords_db)
+    # Safe Merge
     shipments = pd.merge(shipments, coords_db, left_on='City_Clean', right_on='City', how='left')
     
-    # Fleet Manifest Preparation
+    unique_plates = shipments[['Truck License Plate', 'Plate_Clean']].drop_duplicates()
     counts = shipments.groupby('Plate_Clean')['City_Clean'].nunique().reset_index(name='Dests')
-    merged_plates = pd.merge(plates, counts, on='Plate_Clean', how='left').fillna(0)
-    merged_plates = merged_plates.sort_values(by='Dests', ascending=False)
-    merged_plates['Label'] = merged_plates.apply(lambda r: f"{r['PLATE NUMBER']} ({int(r['Dests'])} Destinations)", axis=1)
+    fleet = pd.merge(unique_plates, counts, on='Plate_Clean', how='left').fillna(0)
+    fleet = fleet.sort_values(by='Dests', ascending=False)
+    fleet['Label'] = fleet.apply(lambda r: f"{r['Truck License Plate']} ({int(r['Dests'])} Stops)", axis=1)
     
-    return merged_plates, shipments
+    return fleet, shipments
 
-# --- ROUTE OPTIMIZATION ALGORITHM (TSP) ---
-def calculate_optimal_route(start_coords, destinations_df):
+def calculate_tsp(start_coords, destinations_df):
     unvisited = destinations_df.copy().dropna(subset=['Latitude', 'Longitude'])
-    if unvisited.empty:
-        return unvisited, 0
-
-    route_sequence = []
-    current_loc = start_coords
-    total_distance_km = 0
-
+    if unvisited.empty: return unvisited, 0
+    route, current_loc, total_km = [], start_coords, 0
     while not unvisited.empty:
-        unvisited['Dist_from_current'] = unvisited.apply(
-            lambda row: geodesic(current_loc, (row['Latitude'], row['Longitude'])).kilometers, 
-            axis=1
-        )
-        nearest_idx = unvisited['Dist_from_current'].idxmin()
-        nearest_node = unvisited.loc[nearest_idx]
-        
-        route_sequence.append(nearest_node)
-        total_distance_km += nearest_node['Dist_from_current']
-        current_loc = (nearest_node['Latitude'], nearest_node['Longitude'])
-        
+        unvisited['d'] = unvisited.apply(lambda r: geodesic(current_loc, (r['Latitude'], r['Longitude'])).km, axis=1)
+        nearest_idx = unvisited['d'].idxmin()
+        node = unvisited.loc[nearest_idx]
+        route.append(node)
+        total_km += node['d']
+        current_loc = (node['Latitude'], node['Longitude'])
         unvisited = unvisited.drop(index=nearest_idx)
+    return pd.DataFrame(route).reset_index(drop=True), total_km
 
-    ordered_route_df = pd.DataFrame(route_sequence).reset_index(drop=True)
-    return ordered_route_df, total_distance_km
+# --- UI EXECUTION ---
+fleet, all_shipments = load_and_fix_data()
 
-# --- EXECUTE DATA PIPELINE ---
-try:
-    plate_info, shipments_df = load_and_optimize()
-except Exception as e:
-    st.error(f"Critical Cloud Connection Error. Details: {e}")
-    st.stop()
-
-# --- 1. DISPATCH / LOGIN SCREEN ---
 if st.session_state.user_plate is None:
-    st.title("🚛 Fleet Dispatch Terminal")
-    st.caption("Active Vehicle Selection Profile")
-    
-    sel = st.selectbox("Active Fleet Vehicles", plate_info['Label'])
-    
-    if st.button("Initialize Vehicle Session", type="primary", width="stretch"):
-        row = plate_info[plate_info['Label'] == sel].iloc[0]
+    st.title("🚛 Fleet Control Hub")
+    sel = st.selectbox("Assign Vehicle Profile", fleet['Label'])
+    if st.button("Initialize Terminal", type="primary", width="stretch"):
+        row = fleet[fleet['Label'] == sel].iloc[0]
         st.session_state.user_plate = row['Plate_Clean']
-        st.session_state.display_plate = row['PLATE NUMBER']
-        st.session_state.last_finish_time = None 
+        st.session_state.display_plate = row['Truck License Plate']
         st.rerun()
-
-# --- 2. ACTIVE TERMINAL ---
 else:
     with st.sidebar:
-        st.header("Terminal Control")
-        st.success(f"Active: **{st.session_state.display_plate}**")
-        
-        if st.button("🔄 Swap Vehicle / Logout", width="stretch"):
-            for key in ['user_plate', 'display_plate', 'last_finish_time', 'start_time']:
-                st.session_state[key] = None
+        st.success(f"Truck: {st.session_state.display_plate}")
+        if st.button("Logout", width="stretch"):
+            st.session_state.user_plate = None
             st.rerun()
-            
-        st.markdown("---")
-        st.subheader("Database Management")
         
-        # EXPLICIT MANUAL OVERRIDE SYNC BUTTON
-        if st.button("🌐 Force Sync Coordinates", width="stretch"):
-            with st.spinner("Bypassing cache. Scanning Cloud Database..."):
-                try:
-                    temp_shipments = conn.read(spreadsheet=SHIPMENTS_URL, ttl=0)
-                    temp_coords = conn.read(spreadsheet=COORDS_URL, ttl=0)
-                    
-                    temp_shipments['City_Clean'] = temp_shipments['City'].astype(str).str.strip().str.upper()
-                    temp_coords['City'] = temp_coords['City'].astype(str).str.strip().str.upper()
-                    
-                    cities_to_fetch = list(set(temp_shipments['City_Clean'].dropna().unique()) - set(temp_coords['City'].dropna().unique()))
-                    
-                    if cities_to_fetch:
-                        st.info(f"Targeting {len(cities_to_fetch)} unmapped nodes...")
-                        geolocator = Nominatim(user_agent="alumil_logistics_explicit_sync")
-                        new_data = []
-                        progress_bar = st.progress(0)
-                        
-                        for i, city in enumerate(cities_to_fetch):
-                            loc = geolocator.geocode(f"{city}, Greece", timeout=5)
-                            if loc:
-                                new_data.append({"City": city, "Latitude": loc.latitude, "Longitude": loc.longitude})
-                            time.sleep(1)
-                            progress_bar.progress((i + 1) / len(cities_to_fetch))
-                        
-                        if new_data:
-                            new_df = pd.DataFrame(new_data)
-                            updated_coords = pd.concat([temp_coords, new_df], ignore_index=True)
-                            conn.update(spreadsheet=COORDS_URL, data=updated_coords)
-                            st.success(f"Injected {len(new_data)} nodes to Cloud.")
-                    
-                    load_and_optimize.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Sync failed: {e}")
-            
-    user_data = shipments_df[shipments_df['Plate_Clean'] == st.session_state.user_plate]
-    
-    # Global GPS Capture
+    user_data = all_shipments[all_shipments['Plate_Clean'] == st.session_state.user_plate]
     gps = get_geolocation()
-    curr_lat, curr_lon = None, None
-    if gps and 'coords' in gps:
-        curr_lat = gps['coords']['latitude']
-        curr_lon = gps['coords']['longitude']
+    curr_loc = (gps['coords']['latitude'], gps['coords']['longitude']) if gps and 'coords' in gps else (41.0, 22.8)
     
-    tab1, tab2, tab3, tab4 = st.tabs(["🌎 Manifest", "🗺️ Optimization", "📦 Protocol", "📊 Analytics"])
-    
-    # --- TAB 1: DAILY MANIFEST ---
-    with tab1:
-        st.subheader("Route Overview")
-        m = folium.Map(location=[39.0, 22.0], zoom_start=6)
-        
-        map_points = user_data[['Latitude', 'Longitude', 'City_Clean']].drop_duplicates()
-        for _, row in map_points.iterrows():
-            if pd.notna(row['Latitude']) and pd.notna(row['Longitude']):
-                folium.Marker([row['Latitude'], row['Longitude']], popup=row['City_Clean']).add_to(m)
-            
-        if curr_lat and curr_lon:
-            folium.Marker([curr_lat, curr_lon], popup="Live Location", icon=folium.Icon(color='red')).add_to(m)
-            
-        st_folium(m, width="100%", height=450, key="fast_map")
+    t1, t2, t3 = st.tabs(["🌎 Map", "🗺️ Routing", "📦 Unloading"])
 
-    # --- TAB 2: OPTIMAL ROUTING ---
-    with tab2:
-        st.subheader("Suggested Routing Sequence")
-        if st.button("⚙️ Calculate TSP Path", type="primary", width="stretch"):
-            start_coords = (curr_lat, curr_lon) if curr_lat else (41.0, 22.8) # Default to Kilkis HQ
-            ordered_route, total_km = calculate_optimal_route(start_coords, user_data.drop_duplicates(subset=['City_Clean']))
-            
-            if not ordered_route.empty:
-                st.success(f"Optimal Path Calculated: ~{total_km:.1f} km")
-                st.dataframe(ordered_route[['City_Clean', 'Dist_from_current']], width="stretch")
-            else:
-                st.warning("Coordinate database incomplete for this vehicle.")
+    with t1:
+        st.subheader("Regional Stop Distribution")
+        m1 = folium.Map(location=curr_loc, zoom_start=7)
+        for _, r in user_data.drop_duplicates(subset=['City_Clean']).iterrows():
+            if pd.notna(r['Latitude']):
+                folium.Marker([r['Latitude'], r['Longitude']], popup=r['City_Clean']).add_to(m1)
+        st_folium(m1, width="100%", height=450)
 
-    # --- TAB 3: UNLOADING PROTOCOL ---
-    with tab3:
-        st.subheader("Node Check-in")
-        selected_cust = st.selectbox("Select Customer", sorted(user_data['Name'].unique()))
-        cust_data = user_data[user_data['Name'] == selected_cust]
+    with t2:
+        st.subheader("Optimal Sequential Path")
+        if st.button("⚙️ Calculate & Draw Route", type="primary", width="stretch"):
+            route, km = calculate_tsp(curr_loc, user_data.drop_duplicates(subset=['City_Clean']))
+            if not route.empty:
+                m2 = folium.Map(location=curr_loc, zoom_start=7)
+                path = [curr_loc]
+                folium.Marker(curr_loc, popup="START", icon=folium.Icon(color='black')).add_to(m2)
+                for i, r in route.iterrows():
+                    pos = (r['Latitude'], r['Longitude'])
+                    path.append(pos)
+                    folium.Marker(pos, icon=folium.DivIcon(html=f"""<div style="background-color:blue; color:white; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; border:2px solid white; font-weight:bold;">{i+1}</div>""")).add_to(m2)
+                folium.PolyLine(path, color="blue", weight=3, dash_array='10').add_to(m2)
+                st.success(f"Trip: {km:.1f} km")
+                st_folium(m2, width="100%", height=500, key="route_map")
+
+    with t3:
+        st.subheader("Check-in Protocol")
+        customer = st.selectbox("Select Target Customer", sorted(user_data['Name'].unique()))
+        cust_rows = user_data[user_data['Name'] == customer]
         
-        total_kg = cust_data['Total KG'].sum()
-        profiles = cust_data[['Unpainted', 'White', 'Colored']].sum().sum()
-        accs = cust_data['Accessories'].sum()
+        # Corrected Aggregation
+        tot_kg = cust_rows['Total KG'].sum()
+        prof_kg = cust_rows[['Unpainted', 'White', 'Colored']].sum().sum()
+        acc_kg = cust_rows['Accessories'].sum()
         
         st.markdown("---")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total Load", f"{total_kg:,.1f} KG")
-        c2.metric("Profiles", f"{profiles:,.1f} KG")
-        c3.metric("Accessories", f"{accs:,.1f} KG")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Corrected Load", f"{tot_kg:,.1f} KG")
+        col2.metric("Profiles", f"{prof_kg:,.1f} KG")
+        col3.metric("Accessories", f"{acc_kg:,.1f} KG")
         st.markdown("---")
         
-        if st.button("▶️ Record Arrival", width="stretch"):
+        if st.button("▶️ Start Unloading", width="stretch"):
             st.session_state.start_time = datetime.now()
-            st.toast("Arrival recorded.")
-
-        if st.button("⏹️ Record Departure", type="primary", width="stretch"):
+            st.toast("Timer Active.")
+        if st.button("⏹️ Complete & Sync", type="primary", width="stretch"):
             if st.session_state.start_time:
-                now = datetime.now()
-                unload_dur = (now - st.session_state.start_time).total_seconds() / 60
-                
-                new_record = pd.DataFrame([{
-                    "Timestamp": now.strftime('%Y-%m-%d %H:%M:%S'),
-                    "Plate": st.session_state.display_plate,
-                    "Customer": selected_cust,
-                    "Profiles_KG": profiles,
-                    "Accessories_KG": accs,
-                    "Transit_Mins": 0, # Future logic for automated transit time
-                    "Unload_Mins": round(unload_dur, 1),
-                    "Checkin_Lat": curr_lat,
-                    "Checkin_Lon": curr_lon
-                }])
-                
-                try:
-                    existing_log = conn.read(spreadsheet=LOG_URL, ttl=0)
-                    updated_log = pd.concat([existing_log, new_record], ignore_index=True)
-                    conn.update(spreadsheet=LOG_URL, data=updated_log)
-                    st.success("Cloud DB Synchronized.")
-                except Exception as e:
-                    st.error(f"Sync error: {e}")
-            else:
-                st.error("Protocol Error: Record arrival first.")
-
-    # --- TAB 4: ANALYTICS ---
-    with tab4:
-        st.subheader("Performance Ledger")
-        log_df = conn.read(spreadsheet=LOG_URL, ttl=0)
-        if not log_df.empty:
-            st.dataframe(log_df.sort_values(by="Timestamp", ascending=False), width="stretch")
-        else:
-            st.info("No logs found.")
+                dur = (datetime.now() - st.session_state.start_time).total_seconds() / 60
+                log_entry = pd.DataFrame([{"Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "Plate": st.session_state.display_plate, "Customer": customer, "Unload_Mins": round(dur, 1)}])
+                conn.update(spreadsheet=LOG_URL, data=pd.concat([conn.read(spreadsheet=LOG_URL, ttl=0), log_entry], ignore_index=True))
+                st.success(f"Logged: {dur:.1f} mins.")
+                st.session_state.start_time = None
