@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIG & TIMEZONE ---
-st.set_page_config(page_title="Alumil Logistics Hub v31", layout="wide")
+st.set_page_config(page_title="Alumil Logistics Hub v32", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
 GR_TIME = timezone(timedelta(hours=3))
 
@@ -31,7 +31,6 @@ if "route_data" not in st.session_state: st.session_state.route_data = []
 if "route_geom" not in st.session_state: st.session_state.route_geom = None
 if "start_time" not in st.session_state: st.session_state.start_time = None
 if "draft_sequence" not in st.session_state: st.session_state.draft_sequence = None
-# Νέα State Variables για τα διαδραστικά φίλτρα
 if "filter_plate" not in st.session_state: st.session_state.filter_plate = "Όλα"
 if "filter_date" not in st.session_state: st.session_state.filter_date = "Όλες"
 
@@ -55,7 +54,6 @@ def geocode_address(street, city):
     if not street or str(street).lower() in ['nan', 'none', '']: return None, None
     street_clean = str(street).split(',')[0].strip()
     city_clean = str(city).strip()
-    
     queries = [f"{street_clean}, {city_clean}, Greece", f"{street_clean}, Greece"]
     for q in queries:
         url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(q)}&format=json&limit=1"
@@ -81,8 +79,7 @@ def clean_val(v):
     if isinstance(v, (int, float)): return float(v)
     v_str = str(v).strip()
     if not v_str or v_str.lower() in ['nan', 'none', '']: return 0.0
-    if ',' in v_str:
-        v_str = v_str.replace('.', '').replace(',', '.')
+    if ',' in v_str: v_str = v_str.replace('.', '').replace(',', '.')
     try: return float(v_str)
     except: return 0.0
 
@@ -146,7 +143,6 @@ def load_full_data():
 
 fleet_info, all_data = load_full_data()
 
-# --- ΣΥΝΑΡΤΗΣΗ ΕΠΑΝΑΦΟΡΑΣ ΜΝΗΜΗΣ ---
 def reset_shift():
     st.session_state.user_plate = None
     st.session_state.loading_date = None
@@ -180,24 +176,43 @@ if app_mode == "🚛 Driver Terminal":
     if st.session_state.user_plate is None:
         st.title("Επιλογή Δρομολογίου")
         
-        # --- BULLETPROOF ΑΛΛΗΛΕΞΑΡΤΩΜΕΝΑ DROPDOWNS ---
-        if st.session_state.filter_date != "Όλες":
-            plates_raw = fleet_info[fleet_info['Loading_Date'] == st.session_state.filter_date]['Truck License Plate'].dropna().astype(str).unique()
-        else:
-            plates_raw = fleet_info['Truck License Plate'].dropna().astype(str).unique()
-        avail_plates = ["Όλα"] + sorted(plates_raw.tolist())
-
+        # --- BULLETPROOF ΑΛΛΗΛΕΞΑΡΤΩΜΕΝΑ DROPDOWNS ΜΕ ΣΤΑΣΕΙΣ (NEW) ---
+        # 1. Υπολογισμός Διαθέσιμων Ημερομηνιών
         if st.session_state.filter_plate != "Όλα":
             dates_raw = fleet_info[fleet_info['Truck License Plate'] == st.session_state.filter_plate]['Loading_Date'].dropna().astype(str).unique()
         else:
             dates_raw = fleet_info['Loading_Date'].dropna().astype(str).unique()
         avail_dates = ["Όλες"] + sorted(dates_raw.tolist())
-
-        if st.session_state.filter_plate not in avail_plates: st.session_state.filter_plate = "Όλα"
         if st.session_state.filter_date not in avail_dates: st.session_state.filter_date = "Όλες"
 
+        # 2. Υπολογισμός Διαθέσιμων Φορτηγών ΚΑΙ Πλήθους Στάσεων
+        if st.session_state.filter_date != "Όλες":
+            plates_raw = fleet_info[fleet_info['Loading_Date'] == st.session_state.filter_date]['Truck License Plate'].dropna().astype(str).unique()
+        else:
+            plates_raw = fleet_info['Truck License Plate'].dropna().astype(str).unique()
+        
+        plate_options = ["Όλα"]
+        plate_mapping = {"Όλα": "Όλα"} # Display String -> Real Plate
+        clean_to_display = {"Όλα": "Όλα"} # Real Plate -> Display String
+
+        for p in sorted(plates_raw.tolist()):
+            # Υπολογισμός στάσεων βάσει του φίλτρου ημερομηνίας
+            if st.session_state.filter_date != "Όλες":
+                dests = fleet_info[(fleet_info['Truck License Plate'] == p) & (fleet_info['Loading_Date'] == st.session_state.filter_date)]['Dests'].sum()
+            else:
+                dests = fleet_info[fleet_info['Truck License Plate'] == p]['Dests'].sum()
+            
+            disp = f"{p} ({int(dests)} Στάσεις)"
+            plate_options.append(disp)
+            plate_mapping[disp] = p
+            clean_to_display[p] = disp
+
+        if st.session_state.filter_plate not in clean_to_display: st.session_state.filter_plate = "Όλα"
+
         col1, col2 = st.columns(2)
-        plate_sel = col1.selectbox("🚚 Επιλέξτε Φορτηγό", avail_plates, index=avail_plates.index(st.session_state.filter_plate))
+        # Εμφανίζουμε τα displays (με τις στάσεις) αλλά αποθηκεύουμε το raw (χωρίς στάσεις)
+        sel_disp = col1.selectbox("🚚 Επιλέξτε Φορτηγό", plate_options, index=plate_options.index(clean_to_display[st.session_state.filter_plate]))
+        plate_sel = plate_mapping[sel_disp]
         date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", avail_dates, index=avail_dates.index(st.session_state.filter_date))
 
         if plate_sel != st.session_state.filter_plate or date_sel != st.session_state.filter_date:
@@ -209,7 +224,7 @@ if app_mode == "🚛 Driver Terminal":
 
         if plate_sel != "Όλα" and date_sel != "Όλες":
             selected_route = fleet_info[(fleet_info['Truck License Plate'] == plate_sel) & (fleet_info['Loading_Date'] == date_sel)].iloc[0]
-            st.success(f"✅ Επιτυχής Επιλογή: Προγραμματισμένες Στάσεις Δρομολογίου: **{int(selected_route['Dests'])}**")
+            st.success(f"✅ Επιτυχής Επιλογή! Μπορείτε να ξεκινήσετε.")
             
             if st.button("🚀 Έναρξη Βάρδιας", type="primary", use_container_width=True):
                 st.session_state.user_plate = selected_route['Plate_Clean']
@@ -223,7 +238,6 @@ if app_mode == "🚛 Driver Terminal":
         st.subheader(f"🚚 {st.session_state.display_plate} (Φόρτωση: {st.session_state.loading_date})")
         
         user_data = all_data[(all_data['Plate_Clean'] == st.session_state.user_plate) & (all_data['Loading_Date'] == st.session_state.loading_date)].copy()
-        
         gps = get_geolocation()
         curr_loc = (gps['coords']['latitude'], gps['coords']['longitude']) if gps and 'coords' in gps else (41.0, 22.8)
 
@@ -232,11 +246,7 @@ if app_mode == "🚛 Driver Terminal":
         for idx, row in user_data.iterrows():
             street = str(row.get('Street', ''))
             city = str(row.get('City_x', ''))
-            
-            if street and street.lower() not in ['nan', 'none']:
-                user_data.at[idx, 'Display_Address'] = f"{street}, {city}"
-            else:
-                user_data.at[idx, 'Display_Address'] = city
+            user_data.at[idx, 'Display_Address'] = f"{street}, {city}" if street and street.lower() not in ['nan', 'none'] else city
 
             if pd.isna(row.get('Lat_exact')) and street and street.lower() not in ['nan', 'none']:
                 lat, lon = geocode_address(street, city)
@@ -275,7 +285,6 @@ if app_mode == "🚛 Driver Terminal":
                 if pd.notna(r['Final_Lat']):
                     phone_raw = str(r.get('Telephone 1', ''))
                     tel_html = f"<br><br><a href='tel:{''.join(c for c in phone_raw if c.isdigit() or c == '+')}' style='background-color:#28a745; color:white; padding:6px 12px; text-decoration:none; border-radius:5px; display:inline-block; font-weight:bold;'>📞 Κλήση: {phone_raw}</a>" if phone_raw and phone_raw.lower() not in ['nan', 'none', ''] else ""
-                    
                     kg_info = f"<br>📦 Φορτίο: {gr_num(r.get('Total KG', 0), 1)} KG"
                     popup_content = f"<b>{r['Name']}</b><br>{r.get('Display_Address', '')}{kg_info}{tel_html}"
                     
@@ -349,7 +358,15 @@ if app_mode == "🚛 Driver Terminal":
                 st.divider()
                 st.write("**Τελικό Δρομολόγιο:**")
                 for i, s in enumerate(st.session_state.route_data):
-                    st.write(f"**{i+1}. {s['name']}** ({s.get('address', '')}): 🚛 ~{int(s.get('drive_to', 0))}' | 🏗️ ~{int(s.get('unload', 0))}' (Φορτίο: {gr_num(s['kg'], 0)} KG)")
+                    addr_display = s.get('address', 'Άγνωστη Διεύθυνση')
+                    lat, lon = s['coords'][0], s['coords'][1]
+                    
+                    # --- GOOGLE MAPS & WAZE INTEGRATION ---
+                    gmaps_url = f"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}"
+                    waze_url = f"https://waze.com/ul?ll={lat},{lon}&navigate=yes"
+                    nav_html = f"&nbsp;&nbsp;<a href='{gmaps_url}' target='_blank' style='text-decoration:none;font-size:16px;'>🗺️ G-Maps</a> &nbsp;|&nbsp; <a href='{waze_url}' target='_blank' style='text-decoration:none;font-size:16px;'>🧭 Waze</a>"
+                    
+                    st.markdown(f"**{i+1}. {s['name']}** ({addr_display}): 🚛 ~{int(s.get('drive_to', 0))}' | 🏗️ ~{int(s.get('unload', 0))}' (Φορτίο: {gr_num(s['kg'], 0)} KG){nav_html}", unsafe_allow_html=True)
                 
                 m2 = folium.Map(location=curr_loc, zoom_start=7)
                 folium.Marker(curr_loc, popup="Αφετηρία", icon=folium.Icon(color='green', icon='play')).add_to(m2)
@@ -358,7 +375,6 @@ if app_mode == "🚛 Driver Terminal":
                     folium.PolyLine([[l, lon] for lon, l in st.session_state.route_geom], color="#007bff", weight=5).add_to(m2)
                     for i, s in enumerate(st.session_state.route_data):
                         seq_num = i + 1
-                        
                         phone_raw = str(s.get('telephone', ''))
                         tel_html = f"<br><br><a href='tel:{''.join(c for c in phone_raw if c.isdigit() or c == '+')}' style='background-color:#28a745; color:white; padding:6px 12px; text-decoration:none; border-radius:5px; display:inline-block; font-weight:bold;'>📞 Κλήση: {phone_raw}</a>" if phone_raw and phone_raw.lower() not in ['nan', 'none', ''] else ""
                         kg_info = f"<br>📦 Φορτίο: {gr_num(s.get('kg', 0), 1)} KG"
@@ -414,7 +430,7 @@ if app_mode == "🚛 Driver Terminal":
             st.caption(f"Load Factor: {gr_num((tot/24000)*100, 1)}%")
 
         with tab5:
-            st.subheader("📩 Ειδοποίηση Επόμενου Πελάτη")
+            st.subheader("📩 Ειδοποίηση & Live Tracking")
             if st.session_state.route_data:
                 names = [s['name'] for s in st.session_state.route_data]
                 if active_cust in names:
@@ -431,13 +447,19 @@ if app_mode == "🚛 Driver Terminal":
                         curr_unload = next(s.get('unload', 0) for s in st.session_state.route_data if s['name'] == active_cust)
                         total_wait = int(curr_unload + nxt_cust.get('drive_to', 0))
                         
+                        # --- LIVE TRACKING LINK (UBER STYLE) ---
+                        # Δημιουργία ενός Tracking Link με βάση την Πινακίδα (URL Parameter)
+                        # Προσωρινά δείχνει στο ίδιο το app, αλλά ρυθμισμένο για μελλοντική χρήση του /?track=plate
+                        base_url = "https://alumil-hub.streamlit.app/" # Αντικατέστησε το με το δικό σου URL του Streamlit
+                        tracking_url = f"{base_url}?track={st.session_state.user_plate}"
+                        
                         subject = f"Αναμενόμενη Παράδοση Alumil - {nxt_name}"
-                        body_ui = f"""Αγαπητέ συνεργάτη ({nxt_name}),\n\nΗ εκφόρτωση στον προηγούμενο σταθμό βρίσκεται σε εξέλιξη. Η εκτιμώμενη άφιξη στις εγκαταστάσεις σας είναι σε περίπου **{total_wait} λεπτά**.\n\n📦 **Στοιχεία Παράδοσης:**\n* Προφίλ: {gr_num(nxt_prof, 1)} KG\n* Εξαρτήματα: {gr_num(nxt_acc, 1)} KG\n* **Σύνολο: {gr_num(nxt_tot, 1)} KG**\n\n🚚 Όχημα: {st.session_state.display_plate}"""
+                        body_ui = f"""Αγαπητέ συνεργάτη ({nxt_name}),\n\nΗ εκφόρτωση στον προηγούμενο σταθμό βρίσκεται σε εξέλιξη. Η εκτιμώμενη άφιξη στις εγκαταστάσεις σας είναι σε περίπου **{total_wait} λεπτά**.\n\n📦 **Στοιχεία Παράδοσης:**\n* Προφίλ: {gr_num(nxt_prof, 1)} KG\n* Εξαρτήματα: {gr_num(nxt_acc, 1)} KG\n* **Σύνολο: {gr_num(nxt_tot, 1)} KG**\n\n🚚 Όχημα: {st.session_state.display_plate}\n\n📍 **Live Tracking:** Δείτε το φορτηγό ζωντανά εδώ: {tracking_url}"""
                         st.info(body_ui)
                         
-                        body_mail = f"Αγαπητέ συνεργάτη ({nxt_name}),\n\nΗ εκφόρτωση στον προηγούμενο σταθμό βρίσκεται σε εξέλιξη. Η εκτιμώμενη άφιξη στις εγκαταστάσεις σας είναι σε περίπου {total_wait} λεπτά.\n\nΣτοιχεία Παράδοσης:\n- Προφίλ: {gr_num(nxt_prof, 1)} KG\n- Εξαρτήματα: {gr_num(nxt_acc, 1)} KG\n- Σύνολο: {gr_num(nxt_tot, 1)} KG\n\nΌχημα: {st.session_state.display_plate}\n\nΕυχαριστούμε για τη συνεργασία."
+                        body_mail = f"Αγαπητέ συνεργάτη ({nxt_name}),\n\nΗ εκφόρτωση στον προηγούμενο σταθμό βρίσκεται σε εξέλιξη. Η εκτιμώμενη άφιξη στις εγκαταστάσεις σας είναι σε περίπου {total_wait} λεπτά.\n\nΣτοιχεία Παράδοσης:\n- Προφίλ: {gr_num(nxt_prof, 1)} KG\n- Εξαρτήματα: {gr_num(nxt_acc, 1)} KG\n- Σύνολο: {gr_num(nxt_tot, 1)} KG\n\nΌχημα: {st.session_state.display_plate}\n\nLive Tracking: Μπορείτε να παρακολουθήσετε την πορεία του φορτηγού ζωντανά μέσω του παρακάτω συνδέσμου:\n{tracking_url}\n\nΕυχαριστούμε για τη συνεργασία."
                         link = f"mailto:?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body_mail)}"
-                        st.markdown(f'<a href="{link}" target="_blank" style="padding:15px; background-color:#007bff; color:white; border-radius:8px; text-decoration:none;">📧 Email Ειδοποίησης στον επόμενο</a>', unsafe_allow_html=True)
+                        st.markdown(f'<a href="{link}" target="_blank" style="padding:15px; background-color:#007bff; color:white; border-radius:8px; text-decoration:none;">📧 Email Ειδοποίησης & Tracking</a>', unsafe_allow_html=True)
                     else:
                         st.success("🏁 Αυτός είναι ο τελευταίος πελάτης.")
             else:
