@@ -363,6 +363,8 @@ if app_mode == "🚛 Driver Terminal":
       for _, r in user_data.drop_duplicates(subset=['Name']).iterrows():
         if pd.notna(r['Final_Lat']):
           phone_raw = str(r.get('Telephone 1', ''))
+          # Καθαρισμός τηλεφώνου για το link
+          tel_link = ''.join(c for c in phone_raw if c.isdigit() or c == '+')
           tel_html = f"<br><br><a href='tel:{''.join(c for c in phone_raw if c.isdigit() or c == '+')}' style='background-color:#28a745; color:white; padding:6px 12px; text-decoration:none; border-radius:5px; display:inline-block; font-weight:bold;'>📞 Κλήση: {phone_raw}</a>" if phone_raw and phone_raw.lower() not in ['nan', 'none', ''] else ""
           kg_info = f"<br>📦 Φορτίο: {gr_num(r.get('Total KG', 0), 1)} KG"
           popup_content = f"<b>{r['Name']}</b><br>{r.get('Display_Address', '')}{kg_info}{tel_html}"
