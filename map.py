@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIG & TIMEZONE ---
-st.set_page_config(page_title="Alumil Logistics Hub v34", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Alumil Logistics Hub v40.0", layout="wide", initial_sidebar_state="collapsed")
 conn = st.connection("gsheets", type=GSheetsConnection)
 GR_TIME = timezone(timedelta(hours=3))
 
@@ -27,83 +27,83 @@ DELIVERIES_URL = "https://docs.google.com/spreadsheets/d/10uKgg3AIuSnROK2-6VnY0R
 # 🛑 PUBLIC VIEW: LIVE TRACKING (ΓΙΑ ΤΟΝ ΠΕΛΑΤΗ)
 # ==========================================
 if "track" in st.query_params:
-  tracked_plate = st.query_params["track"].upper().replace(' ', '')   
- 
-  st.title("📍 Alumil Live Delivery Tracking")
-  st.write(f"Παρακολούθηση πορείας οχήματος: **{tracked_plate}**")
- 
-  if st.button("🔄 Ανανέωση Θέσης", type="primary"):
-      st.cache_data.clear()
-   
-  try:
-    transit = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
-    transit.columns = transit.columns.str.strip()
-   
-    if 'Plate' in transit.columns:
-      transit['Plate_Clean'] = transit['Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
-      vehicle_log = transit[transit['Plate_Clean'] == tracked_plate]
-     
-      if not vehicle_log.empty:
-        # Ανάκτηση των 5 πιο πρόσφατων στιγμάτων
-        recent_logs = vehicle_log.tail(5)
-       
-        path_coords = []
-        for _, row in recent_logs.iterrows():
-          lat = float(row.get('Latitude', row.get('Lat', 40.6401)))
-          lon = float(row.get('Longitude', row.get('Lon', 22.9444)))
-          path_coords.append([lat, lon])
-       
-        # Το τελευταίο στίγμα είναι η τρέχουσα θέση
-        latest = recent_logs.iloc[-1]
-        curr_lat, curr_lon = path_coords[-1][0], path_coords[-1][1]
-        last_update = latest.get('Timestamp', 'Άγνωστη ώρα')
-       
-        st.info(f"Τελευταία ενημέρωση τηλεματικής: **{last_update}**")
-       
-        m_public = folium.Map(location=[curr_lat, curr_lon], zoom_start=15)
-       
-        # Σχεδιασμός Πορείας (αν υπάρχουν πάνω από 1 στίγματα)
-        if len(path_coords) > 1:
-          # Γραμμή πορείας
-          folium.PolyLine(
-            path_coords,
-            color="#007bff",
-            weight=4,
-            opacity=0.7,
-            dash_array='10, 10', # Διακεκομμένη γραμμή
-            tooltip="Πρόσφατη Πορεία"
-          ).add_to(m_public)
-         
-          # Μικρές τελείες στα προηγούμενα στίγματα
-          for coord in path_coords[:-1]:
-            folium.CircleMarker(
-              location=coord,
-              radius=4,
-              color="#007bff",
-              fill=True,
-              fill_color="#007bff",
-              fill_opacity=0.6,
-              tooltip="Προηγούμενο στίγμα"
-            ).add_to(m_public)
-       
-        # Εικονίδιο φορτηγού στην ΤΡΕΧΟΥΣΑ θέση
-        folium.Marker(
-          [curr_lat, curr_lon],
-          popup=f"Alumil Delivery<br>{tracked_plate}",
-          tooltip="Η παραγγελία σας βρίσκεται εδώ",
-          icon=folium.Icon(color='green', icon='truck', prefix='fa')
-        ).add_to(m_public)
-       
-        st_folium(m_public, width="100%", height=500, key="public_tracking_map")
-      else:
-        st.warning("Το όχημα δεν εκπέμπει στίγμα αυτή τη στιγμή ή δεν έχει ξεκινήσει το δρομολόγιο.")
-    else:
-      st.error("Σφάλμα συστήματος: Δεν βρέθηκε στήλη 'Plate' στο Transit_Log.")
-  except Exception as e:
-    st.warning("Αναμονή για το πρώτο στίγμα GPS του οχήματος...")
+    tracked_plate = st.query_params["track"].upper().replace(' ', '')    
+    st.title("📍 Alumil Live Delivery Tracking")
+    
+    if st.button("🔄 Ανανέωση Θέσης", type="primary"):
+        st.cache_data.clear()
+    
+    try:
+        # Φόρτωση όλων των απαραίτητων δεδομένων για τη λογική sequence
+        ship_df = conn.read(spreadsheet=SHIPMENTS_URL, ttl=300)
+        pod_logs = conn.read(spreadsheet=LOG_URL, worksheet="Sheet1", ttl=0) 
+        transit = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
+        
+        ship_df.columns = ship_df.columns.str.strip()
+        ship_df['Plate_Clean'] = ship_df['Truck License Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
+        
+        # 1. Βρίσκουμε ποιο είναι το τρέχον δρομολόγιο και ποιος ο επόμενος πελάτης
+        truck_route = ship_df[ship_df['Plate_Clean'] == tracked_plate].drop_duplicates('Name')
+        finished_list = pod_logs[pod_logs['Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper() == tracked_plate]['Customer'].tolist()
+        pending_route = truck_route[~truck_route['Name'].isin(finished_list)]
+        
+        if pending_route.empty:
+            st.success("🏁 Οι παραδόσεις για αυτό το όχημα ολοκληρώθηκαν. Ευχαριστούμε!")
+            st.stop()
+            
+        target_cust = pending_route.iloc[0] # Ο πελάτης στον οποίο κατευθύνεται τώρα
+        st.subheader(f"Προορισμός: {target_cust['Name']}")
 
-  # ΤΕΡΜΑΤΙΖΕΙ ΤΗΝ ΕΦΑΡΜΟΓΗ ΕΔΩ. Ο ΠΕΛΑΤΗΣ ΔΕΝ ΠΑΕΙ ΠΟΤΕ ΠΙΟ ΚΑΤΩ.
-  st.stop()
+        # 2. Επεξεργασία GPS τηλεματικής
+        transit.columns = transit.columns.str.strip()
+        transit['Plate_Clean'] = transit['Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
+        vehicle_log = transit[transit['Plate_Clean'] == tracked_plate].copy()
+        
+        # Καθαρισμός από "Location Unknown"
+        vehicle_log['Latitude'] = pd.to_numeric(vehicle_log['Latitude'], errors='coerce')
+        vehicle_log['Longitude'] = pd.to_numeric(vehicle_log['Longitude'], errors='coerce')
+        vehicle_log = vehicle_log.dropna(subset=['Latitude', 'Longitude'])
+        
+        if not vehicle_log.empty:
+            recent_logs = vehicle_log.tail(10) # Τελευταία 10 σημεία για driving line
+            curr_pos = (recent_logs.iloc[-1]['Latitude'], recent_logs.iloc[-1]['Longitude'])
+            last_upd = recent_logs.iloc[-1].get('Timestamp', 'Άγνωστη ώρα')
+            
+            # Εύρεση συντεταγμένων πελάτη
+            # Προσπάθεια εύρεσης από τον κεντρικό πίνακα ή geocode
+            t_lat, t_lon = geocode_address(target_cust.get('Street', ''), target_cust['City'])
+            
+            if t_lat:
+                dist = geodesic(curr_pos, (t_lat, t_lon)).km
+                
+                # 3. Λογική Geofencing (20km)
+                if dist > 20:
+                    st.warning(f"🚚 Το όχημα βρίσκεται καθ' οδόν ({int(dist)} χλμ. μακριά).")
+                    st.info("ℹ️ Ο ζωντανός χάρτης θα ενεργοποιηθεί μόλις το φορτηγό εισέλθει στην ακτίνα των 20 χλμ. από την τοποθεσία σας.")
+                else:
+                    st.success(f"✨ Το φορτηγό πλησιάζει! Απόσταση: {gr_num(dist, 1)} χλμ. | Ενημέρωση: {last_upd}")
+                    m_public = folium.Map(location=curr_pos, zoom_start=14)
+                    
+                    # 4. Σχεδιασμός Πραγματικής Διαδρομής (OSRM Driving Lines)
+                    path_coords = [[row['Latitude'], row['Longitude']] for _, row in recent_logs.iterrows()]
+                    geom, _, _ = get_osrm_data(path_coords)
+                    
+                    if geom:
+                        folium.PolyLine([[p[1], p[0]] for p in geom], color="#E3000F", weight=5, opacity=0.8).add_to(m_public)
+                    
+                    folium.Marker(curr_pos, icon=folium.Icon(color='red', icon='truck', prefix='fa'), tooltip="Τρέχουσα Θέση").add_to(m_public)
+                    folium.Marker([t_lat, t_lon], icon=folium.Icon(color='green', icon='home'), tooltip="Εκφόρτωση").add_to(m_public)
+                    
+                    st_folium(m_public, width="100%", height=500, key="public_tracking_map")
+            else:
+                st.warning("Υπολογισμός θέσης προορισμού...")
+        else:
+            st.warning("Αναμονή για λήψη σήματος GPS από το όχημα...")
+            
+    except Exception as e:
+        st.error(f"Παρουσιάστηκε πρόβλημα κατά τη σύνδεση με το GPS: {e}")
+
+    st.stop()
 # ==========================================
 
 
@@ -543,9 +543,6 @@ if app_mode == "🚛 Driver Terminal":
 
 # --- 2. ADMIN DASHBOARD ---
 elif app_mode == "📊 Admin Dashboard":
-  st.title("Admin Control Panel")
-  logs = conn.read(spreadsheet=LOG_URL, ttl=0)
-  st.dataframe(logs.tail(20), use_container_width=True)
-
-
-
+  st.title("Admin Control Panel")
+  logs = conn.read(spreadsheet=LOG_URL, ttl=0)
+  st.dataframe(logs.tail(20), use_container_width=True)
