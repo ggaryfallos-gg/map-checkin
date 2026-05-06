@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIG & TIMEZONE ---
-st.set_page_config(page_title="Alumil Logistics Hub v29", layout="wide")
+st.set_page_config(page_title="Alumil Logistics Hub v30", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
 GR_TIME = timezone(timedelta(hours=3))
 
@@ -31,6 +31,9 @@ if "route_data" not in st.session_state: st.session_state.route_data = []
 if "route_geom" not in st.session_state: st.session_state.route_geom = None
 if "start_time" not in st.session_state: st.session_state.start_time = None
 if "draft_sequence" not in st.session_state: st.session_state.draft_sequence = None
+# Νέα State Variables για τα διαδραστικά φίλτρα
+if "filter_plate" not in st.session_state: st.session_state.filter_plate = "Όλα"
+if "filter_date" not in st.session_state: st.session_state.filter_date = "Όλες"
 
 # --- LOGIN SCREEN ---
 def check_password():
@@ -90,7 +93,6 @@ def gr_num(val, decimals=1):
 # --- DATA PIPELINE ---
 @st.cache_data(ttl=300)
 def load_full_data():
-    # 1. Shipments
     ship = conn.read(spreadsheet=SHIPMENTS_URL, ttl=300)
     ship.columns = ship.columns.str.strip()
     ship['Plate_Clean'] = ship['Truck License Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
@@ -100,7 +102,6 @@ def load_full_data():
     for c in ['Total KG', 'Unpainted', 'White', 'Colored', 'Accessories']:
         if c in ship.columns: ship[c] = ship[c].apply(clean_val)
     
-    # 2. Deliveries (ERP Join)
     try:
         dels = conn.read(spreadsheet=DELIVERIES_URL, ttl=300)
         dels.columns = dels.columns.str.strip()
@@ -112,14 +113,12 @@ def load_full_data():
     except:
         ship['Loading_Date'] = 'Άγνωστη Ημ/νία'
 
-    # 3. Cusaddress (Με Latitude / Longitude)
     try:
         cus_df = conn.read(spreadsheet=CUSADDRESS_URL, ttl=300)
         cus_df.columns = cus_df.columns.str.strip()
         for col in ['Name', 'Street', 'Telephone 1', 'Postal Code', 'Latitude', 'Longitude']:
             if col not in cus_df.columns: cus_df[col] = ''
         
-        # Μετατροπή των νέων στηλών σε αριθμητικές
         cus_df['Latitude'] = pd.to_numeric(cus_df['Latitude'], errors='coerce')
         cus_df['Longitude'] = pd.to_numeric(cus_df['Longitude'], errors='coerce')
         
@@ -130,25 +129,33 @@ def load_full_data():
         df = ship.copy()
         df['Street'], df['Telephone 1'], df['Postal Code'], df['Lat_exact'], df['Lon_exact'] = '', '', '', None, None
 
-    # 4. Fallback Coords (Πόλεις)
     coords = conn.read(spreadsheet=COORDS_URL, ttl=300)
     coords.columns = coords.columns.str.strip()
     coords['City_Match'] = coords['City'].astype(str).str.strip().str.upper()
     coords = coords.rename(columns={'Latitude': 'Lat_city', 'Longitude': 'Lon_city'})
     df = pd.merge(df, coords.drop_duplicates('City_Match'), left_on='City_Clean', right_on='City_Match', how='left')
     
-    # 5. Core Mapping (Ακριβής Διεύθυνση αλλιώς Πόλη)
     df['Final_Lat'] = df['Lat_exact'].fillna(df['Lat_city'])
     df['Final_Lon'] = df['Lon_exact'].fillna(df['Lon_city'])
 
     counts = df.groupby(['Plate_Clean', 'Loading_Date'])['Name'].nunique().reset_index(name='Dests')
     unique_routes = df[['Truck License Plate', 'Plate_Clean', 'Loading_Date']].drop_duplicates()
     fleet_summary = pd.merge(unique_routes, counts, on=['Plate_Clean', 'Loading_Date'], how='left').fillna(0)
-    fleet_summary['Label'] = fleet_summary.apply(lambda r: f"{r['Truck License Plate']} | Φόρτ.: {r['Loading_Date']} ({int(r['Dests'])} Στάσεις)", axis=1)
     
-    return fleet_summary.sort_values('Dests', ascending=False), df
+    return fleet_summary, df
 
 fleet_info, all_data = load_full_data()
+
+# --- ΣΥΝΑΡΤΗΣΗ ΕΠΑΝΑΦΟΡΑΣ ΜΝΗΜΗΣ ---
+def reset_shift():
+    st.session_state.user_plate = None
+    st.session_state.loading_date = None
+    st.session_state.draft_sequence = None
+    st.session_state.route_data = []
+    st.session_state.route_geom = None
+    st.session_state.start_time = None
+    st.session_state.filter_plate = "Όλα"
+    st.session_state.filter_date = "Όλες"
 
 # --- SIDEBAR ---
 st.sidebar.title("Alumil Hub")
@@ -156,9 +163,8 @@ st.sidebar.write(f"👤 **{st.session_state.username}**")
 
 if st.session_state.user_plate is not None:
     st.sidebar.divider()
-    if st.sidebar.button("🔄 Αλλαγή Οχήματος", use_container_width=True):
-        for key in ['user_plate', 'loading_date', 'draft_sequence', 'route_data', 'route_geom', 'start_time']:
-            st.session_state[key] = None if key != 'route_data' else []
+    if st.sidebar.button("🔄 Αλλαγή Οχήματος / Ημ/νίας", use_container_width=True):
+        reset_shift()
         st.rerun()
 
 st.sidebar.divider()
@@ -166,21 +172,55 @@ app_mode = st.sidebar.radio("Μενού", ["🚛 Driver Terminal", "📊 Admin D
 
 if st.sidebar.button("🚪 Logout"):
     st.session_state.password_correct = False
-    for key in ['user_plate', 'loading_date', 'draft_sequence', 'route_data', 'route_geom', 'start_time']:
-        st.session_state[key] = None if key != 'route_data' else []
+    reset_shift()
     st.rerun()
 
 # --- 1. DRIVER TERMINAL ---
 if app_mode == "🚛 Driver Terminal":
     if st.session_state.user_plate is None:
         st.title("Επιλογή Δρομολογίου")
-        sel = st.selectbox("Επιλέξτε Όχημα & Φόρτωση", fleet_info['Label'])
-        if st.button("Έναρξη", type="primary", use_container_width=True):
-            row = fleet_info[fleet_info['Label'] == sel].iloc[0]
-            st.session_state.user_plate = row['Plate_Clean']
-            st.session_state.loading_date = row['Loading_Date']
-            st.session_state.display_plate = row['Truck License Plate']
+        
+        # --- ΑΛΛΗΛΕΞΑΡΤΩΜΕΝΑ DROPDOWNS (ΔΙΑΔΡΑΣΤΙΚΑ ΦΙΛΤΡΑ) ---
+        # 1. Υπολογισμός διαθέσιμων επιλογών
+        if st.session_state.filter_date != "Όλες":
+            avail_plates = ["Όλα"] + sorted(fleet_info[fleet_info['Loading_Date'] == st.session_state.filter_date]['Truck License Plate'].unique().tolist())
+        else:
+            avail_plates = ["Όλα"] + sorted(fleet_info['Truck License Plate'].unique().tolist())
+
+        if st.session_state.filter_plate != "Όλα":
+            avail_dates = ["Όλες"] + sorted(fleet_info[fleet_info['Truck License Plate'] == st.session_state.filter_plate]['Loading_Date'].unique().tolist())
+        else:
+            avail_dates = ["Όλες"] + sorted(fleet_info['Loading_Date'].unique().tolist())
+
+        # Προστασία αν μια προηγούμενη επιλογή δεν υπάρχει πλέον
+        if st.session_state.filter_plate not in avail_plates: st.session_state.filter_plate = "Όλα"
+        if st.session_state.filter_date not in avail_dates: st.session_state.filter_date = "Όλες"
+
+        col1, col2 = st.columns(2)
+        plate_sel = col1.selectbox("🚚 Επιλέξτε Φορτηγό", avail_plates, index=avail_plates.index(st.session_state.filter_plate))
+        date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", avail_dates, index=avail_dates.index(st.session_state.filter_date))
+
+        # 2. Ενημέρωση μνήμης και αυτόματο Rerun αν αλλάξει κάτι
+        if plate_sel != st.session_state.filter_plate or date_sel != st.session_state.filter_date:
+            st.session_state.filter_plate = plate_sel
+            st.session_state.filter_date = date_sel
             st.rerun()
+
+        st.divider()
+
+        # 3. Εμφάνιση Κουμπιού Έναρξης ΜΟΝΟ αν έχουν επιλεγεί και τα δύο
+        if plate_sel != "Όλα" and date_sel != "Όλες":
+            selected_route = fleet_info[(fleet_info['Truck License Plate'] == plate_sel) & (fleet_info['Loading_Date'] == date_sel)].iloc[0]
+            st.success(f"✅ Επιτυχής Επιλογή: Προγραμματισμένες Στάσεις Δρομολογίου: **{int(selected_route['Dests'])}**")
+            
+            if st.button("🚀 Έναρξη Βάρδιας", type="primary", use_container_width=True):
+                st.session_state.user_plate = selected_route['Plate_Clean']
+                st.session_state.loading_date = selected_route['Loading_Date']
+                st.session_state.display_plate = selected_route['Truck License Plate']
+                st.rerun()
+        else:
+            st.info("ℹ️ Παρακαλώ επιλέξτε **Φορτηγό** και **Ημερομηνία** για να ξεκινήσετε.")
+
     else:
         st.subheader(f"🚚 {st.session_state.display_plate} (Φόρτωση: {st.session_state.loading_date})")
         
@@ -191,7 +231,6 @@ if app_mode == "🚛 Driver Terminal":
 
         # --- GEOCODING & AUTO-SAVE LOGIC ---
         new_coords_batch = []
-        
         for idx, row in user_data.iterrows():
             street = str(row.get('Street', ''))
             city = str(row.get('City_x', ''))
@@ -201,7 +240,6 @@ if app_mode == "🚛 Driver Terminal":
             else:
                 user_data.at[idx, 'Display_Address'] = city
 
-            # Εάν λείπει η ακριβής συντεταγμένη και έχουμε οδό
             if pd.isna(row.get('Lat_exact')) and street and street.lower() not in ['nan', 'none']:
                 lat, lon = geocode_address(street, city)
                 if lat and lon:
@@ -210,7 +248,6 @@ if app_mode == "🚛 Driver Terminal":
                     user_data.at[idx, 'Lat_exact'] = lat 
                     new_coords_batch.append({'Name': row['Name'], 'Latitude': lat, 'Longitude': lon})
 
-        # Εάν βρέθηκαν νέες συντεταγμένες, κάνουμε Batch Update στο GSheet
         if new_coords_batch:
             with st.spinner("Αποθήκευση νέων συντεταγμένων στη βάση..."):
                 fresh_cus = conn.read(spreadsheet=CUSADDRESS_URL, ttl=0)
@@ -225,7 +262,7 @@ if app_mode == "🚛 Driver Terminal":
                         fresh_cus.loc[mask, 'Longitude'] = update['Longitude']
                 
                 conn.update(spreadsheet=CUSADDRESS_URL, data=fresh_cus)
-                load_full_data.clear() # Καθαρισμός cache για να διαβάσει τα νέα data την επόμενη φορά
+                load_full_data.clear() 
                 st.toast(f"✅ Αποθηκεύτηκαν μόνιμα {len(new_coords_batch)} νέες διευθύνσεις!")
 
         # --- UI TABS ---
@@ -266,12 +303,8 @@ if app_mode == "🚛 Driver Terminal":
                     pts.append((row['Final_Lat'], row['Final_Lon']))
                     un_time = (row['Total KG'] / 1000) * 10
                     seq_list.append({
-                        'name': row['Name'], 
-                        'address': row['Display_Address'], 
-                        'telephone': str(row.get('Telephone 1', '')),
-                        'kg': row['Total KG'], 
-                        'unload': un_time, 
-                        'coords': (row['Final_Lat'], row['Final_Lon'])
+                        'name': row['Name'], 'address': row['Display_Address'], 'telephone': str(row.get('Telephone 1', '')),
+                        'kg': row['Total KG'], 'unload': un_time, 'coords': (row['Final_Lat'], row['Final_Lon'])
                     })
                     unvisited = unvisited.drop(index=idx)
                 
@@ -330,7 +363,6 @@ if app_mode == "🚛 Driver Terminal":
                         
                         phone_raw = str(s.get('telephone', ''))
                         tel_html = f"<br><br><a href='tel:{''.join(c for c in phone_raw if c.isdigit() or c == '+')}' style='background-color:#28a745; color:white; padding:6px 12px; text-decoration:none; border-radius:5px; display:inline-block; font-weight:bold;'>📞 Κλήση: {phone_raw}</a>" if phone_raw and phone_raw.lower() not in ['nan', 'none', ''] else ""
-                        
                         kg_info = f"<br>📦 Φορτίο: {gr_num(s.get('kg', 0), 1)} KG"
                         popup_content = f"<b>Στάση {seq_num}: {s['name']}</b><br>{s.get('address', '')}{kg_info}{tel_html}"
                         
