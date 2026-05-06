@@ -23,76 +23,6 @@ CUSADDRESS_URL = "https://docs.google.com/spreadsheets/d/1k9-gCuo_BxVezLaVoagh04
 DELIVERIES_URL = "https://docs.google.com/spreadsheets/d/10uKgg3AIuSnROK2-6VnY0Rm3U4vH2xv8O4OFthgaWww/edit"
 
 
-# ==========================================
-# 🛑 PUBLIC VIEW: LIVE TRACKING
-# ==========================================
-if "track" in st.query_params:
-    # Καθαρίζουμε την πινακίδα από το URL (βγάζουμε κενά και %20)
-    tracked_plate = st.query_params["track"].replace(' ', '').replace('%20', '').upper()
-    
-    st.title("📍 Alumil Live Delivery Tracking")
-    st.write(f"Παρακολούθηση οχήματος: **{tracked_plate}**")
-
-    if st.button("🔄 Ανανέωση Θέσης", type="primary"):
-        st.cache_data.clear()
-    
-    try:
-        transit = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
-        transit.columns = transit.columns.str.strip()
-        
-        if 'Plate' in transit.columns:
-            # Καθαρίζουμε τις πινακίδες στο Google Sheet για τη σύγκριση
-            transit['Plate_Clean'] = transit['Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
-            vehicle_log = transit[transit['Plate_Clean'] == tracked_plate]
-            
-            if not vehicle_log.empty:
-                # Παίρνουμε τα τελευταία 10 στίγματα
-                recent_logs = vehicle_log.tail(10)
-                
-                path_coords = []
-                for _, row in recent_logs.iterrows():
-                    try:
-                        lat = float(row.get('Latitude', row.iloc[3]))
-                        lon = float(row.get('Longitude', row.iloc[4]))
-                        path_coords.append([lat, lon])
-                    except: continue
-                
-                if path_coords:
-                    curr_lat, curr_lon = path_coords[-1][0], path_coords[-1][1]
-                    last_update = recent_logs.iloc[-1].get('Timestamp', 'Άγνωστη ώρα')
-                    
-                    st.info(f"Τελευταία ενημέρωση: **{last_update}**")
-                    
-                    # ΟΡΙΣΜΟΣ ΧΑΡΤΗ (Zoom 14 και Ύψος 500)
-                    m_public = folium.Map(location=[curr_lat, curr_lon], zoom_start=14)
-                    
-                    # ΠΡΑΓΜΑΤΙΚΗ ΔΙΑΔΡΟΜΗ (OSRM)
-                    if len(path_coords) > 1:
-                        geom, _, _ = get_osrm_data(path_coords)
-                        if geom:
-                            folium.PolyLine([[p[1], p[0]] for p in geom], color="#007bff", weight=5).add_to(m_public)
-                        else:
-                            folium.PolyLine(path_coords, color="#007bff", weight=3, dash_array='5,5').add_to(m_public)
-                    
-                    # MARKER ΦΟΡΤΗΓΟΥ
-                    folium.Marker(
-                        [curr_lat, curr_lon],
-                        popup=f"Alumil Truck: {tracked_plate}",
-                        icon=folium.Icon(color='green', icon='truck', prefix='fa')
-                    ).add_to(m_public)
-                    
-                    st_folium(m_public, width="100%", height=500, key="fixed_map_v45")
-                else:
-                    st.error("Δεν βρέθηκαν έγκυρες συντεταγμένες.")
-            else:
-                st.warning(f"Δεν υπάρχουν δεδομένα για την πινακίδα: {tracked_plate}")
-        else:
-            st.error("Η στήλη 'Plate' δεν βρέθηκε στο Transit_Log.")
-    except Exception as e:
-        st.warning(f"Αναμονή για δεδομένα GPS... (Error: {e})")
-
-    st.stop()
-# ==========================================
 
 
 # --- SESSION STATE INIT (ΓΙΑ ALUMIL USERS) ---
@@ -532,6 +462,80 @@ if app_mode == "🚛 Driver Terminal":
             st.success("🏁 Αυτός είναι ο τελευταίος πελάτης.")
       else:
         st.warning("Υπολογίστε το δρομολόγιο στο Tab 2.")
+
+
+# ==========================================
+# 🛑 PUBLIC VIEW: LIVE TRACKING
+# ==========================================
+if "track" in st.query_params:
+    # Καθαρίζουμε την πινακίδα από το URL (βγάζουμε κενά και %20)
+    tracked_plate = st.query_params["track"].replace(' ', '').replace('%20', '').upper()
+    
+    st.title("📍 Alumil Live Delivery Tracking")
+    st.write(f"Παρακολούθηση οχήματος: **{tracked_plate}**")
+
+    if st.button("🔄 Ανανέωση Θέσης", type="primary"):
+        st.cache_data.clear()
+    
+    try:
+        transit = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
+        transit.columns = transit.columns.str.strip()
+        
+        if 'Plate' in transit.columns:
+            # Καθαρίζουμε τις πινακίδες στο Google Sheet για τη σύγκριση
+            transit['Plate_Clean'] = transit['Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
+            vehicle_log = transit[transit['Plate_Clean'] == tracked_plate]
+            
+            if not vehicle_log.empty:
+                # Παίρνουμε τα τελευταία 10 στίγματα
+                recent_logs = vehicle_log.tail(10)
+                
+                path_coords = []
+                for _, row in recent_logs.iterrows():
+                    try:
+                        lat = float(row.get('Latitude', row.iloc[3]))
+                        lon = float(row.get('Longitude', row.iloc[4]))
+                        path_coords.append([lat, lon])
+                    except: continue
+                
+                if path_coords:
+                    curr_lat, curr_lon = path_coords[-1][0], path_coords[-1][1]
+                    last_update = recent_logs.iloc[-1].get('Timestamp', 'Άγνωστη ώρα')
+                    
+                    st.info(f"Τελευταία ενημέρωση: **{last_update}**")
+                    
+                    # ΟΡΙΣΜΟΣ ΧΑΡΤΗ (Zoom 14 και Ύψος 500)
+                    m_public = folium.Map(location=[curr_lat, curr_lon], zoom_start=14)
+                    
+                    # ΠΡΑΓΜΑΤΙΚΗ ΔΙΑΔΡΟΜΗ (OSRM)
+                    if len(path_coords) > 1:
+                        geom, _, _ = get_osrm_data(path_coords)
+                        if geom:
+                            folium.PolyLine([[p[1], p[0]] for p in geom], color="#007bff", weight=5).add_to(m_public)
+                        else:
+                            folium.PolyLine(path_coords, color="#007bff", weight=3, dash_array='5,5').add_to(m_public)
+                    
+                    # MARKER ΦΟΡΤΗΓΟΥ
+                    folium.Marker(
+                        [curr_lat, curr_lon],
+                        popup=f"Alumil Truck: {tracked_plate}",
+                        icon=folium.Icon(color='green', icon='truck', prefix='fa')
+                    ).add_to(m_public)
+                    
+                    st_folium(m_public, width="100%", height=500, key="fixed_map_v45")
+                else:
+                    st.error("Δεν βρέθηκαν έγκυρες συντεταγμένες.")
+            else:
+                st.warning(f"Δεν υπάρχουν δεδομένα για την πινακίδα: {tracked_plate}")
+        else:
+            st.error("Η στήλη 'Plate' δεν βρέθηκε στο Transit_Log.")
+    except Exception as e:
+        st.warning(f"Αναμονή για δεδομένα GPS... (Error: {e})")
+
+    st.stop()
+# ==========================================
+
+
 
 # --- 2. ADMIN DASHBOARD ---
 elif app_mode == "📊 Admin Dashboard":
