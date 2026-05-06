@@ -36,7 +36,7 @@ if "track" in st.query_params:
     try:
         # Φόρτωση όλων των απαραίτητων δεδομένων για τη λογική sequence
         ship_df = conn.read(spreadsheet=SHIPMENTS_URL, ttl=300)
-        pod_logs = conn.read(spreadsheet=LOG_URL, worksheet="Sheet1", ttl=0) 
+        pod_logs = conn.read(spreadsheet=LOG_URL, worksheet="Log", ttl=0) 
         transit = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
         
         ship_df.columns = ship_df.columns.str.strip()
