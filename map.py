@@ -45,7 +45,7 @@ if "track" in st.query_params:
      
       if not vehicle_log.empty:
         # Ανάκτηση των  πιο πρόσφατων στιγμάτων
-        recent_logs = vehicle_log.tail(10)
+        recent_logs = vehicle_log.tail()
        
         path_coords = []
         for _, row in recent_logs.iterrows():
