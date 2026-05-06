@@ -62,27 +62,21 @@ if "track" in st.query_params:
        
         m_public = folium.Map(location=[curr_lat, curr_lon], zoom_start=15)
        
-       # Αντί για το απλό PolyLine, κάνουμε κλήση στο OSRM
-    if len(path_coords) > 1:
-      geom, _, _ = get_osrm_data(path_coords)
-    
-    if geom:
-        # Σχεδιάζουμε τη γραμμή πάνω στο δρόμο (OSRM geometry)
-        folium.PolyLine(
-            [[p[1], p[0]] for p in geom], # Αντιστροφή lat/lon που δίνει το OSRM
+        # Σχεδιασμός Πορείας (αν υπάρχουν πάνω από 1 στίγματα)
+        if len(path_coords) > 1:
+          # Γραμμή πορείας
+          folium.PolyLine(
+            path_coords,
             color="#007bff",
-            weight=5,
-            opacity=0.8,
-            tooltip="Πραγματική Πορεία"
-        ).add_to(m_public)
-    else:
-        # Fallback σε ευθεία γραμμή αν το API αποτύχει
-        folium.PolyLine(path_coords, color="#007bff", weight=3, dash_array='5, 5').add_to(m_public)
-      
+            weight=4,
+            opacity=0.7,
+            dash_array='10, 10', # Διακεκομμένη γραμμή
+            tooltip="Πρόσφατη Πορεία"
+          ).add_to(m_public)
          
           # Μικρές τελείες στα προηγούμενα στίγματα
-      for coord in path_coords[:-1]:
-        folium.CircleMarker(
+          for coord in path_coords[:-1]:
+            folium.CircleMarker(
               location=coord,
               radius=4,
               color="#007bff",
@@ -456,13 +450,7 @@ if app_mode == "🚛 Driver Terminal":
         folium.Marker(curr_loc, popup="Αφετηρία", icon=folium.Icon(color='green', icon='play')).add_to(m2)
 
         if st.session_state.route_geom:
-    # Εδώ η route_geom περιέχει ήδη τα σημεία του δρόμου από την get_osrm_data
-    folium.PolyLine(
-        [[l, lon] for lon, l in st.session_state.route_geom], 
-        color="#E3000F", # Κόκκινο Alumil
-        weight=6,
-        opacity=0.7
-    ).add_to(m2)
+          folium.PolyLine([[l, lon] for lon, l in st.session_state.route_geom], color="#007bff", weight=5).add_to(m2)
           for i, s in enumerate(st.session_state.route_data):
             seq_num = i + 1
             phone_raw = str(s.get('telephone', ''))
