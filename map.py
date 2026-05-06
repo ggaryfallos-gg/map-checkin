@@ -25,32 +25,7 @@ DELIVERIES_URL = "https://docs.google.com/spreadsheets/d/10uKgg3AIuSnROK2-6VnY0R
 
 
 
-# --- SESSION STATE INIT (ΓΙΑ ALUMIL USERS) ---
-if "password_correct" not in st.session_state: st.session_state.password_correct = False
-if "user_plate" not in st.session_state: st.session_state.user_plate = None
-if "loading_date" not in st.session_state: st.session_state.loading_date = None
-if "username" not in st.session_state: st.session_state.username = None
-if "route_data" not in st.session_state: st.session_state.route_data = []
-if "route_geom" not in st.session_state: st.session_state.route_geom = None
-if "start_time" not in st.session_state: st.session_state.start_time = None
-if "draft_sequence" not in st.session_state: st.session_state.draft_sequence = None
-if "filter_plate" not in st.session_state: st.session_state.filter_plate = "Όλα"
-if "filter_date" not in st.session_state: st.session_state.filter_date = "Όλες"
 
-# --- LOGIN SCREEN ---
-def check_password():
-  if st.session_state.password_correct: return True
-  st.set_page_config(initial_sidebar_state="expanded") if not st.session_state.password_correct else None
-  st.title("🔐 Alumil Secure Login")
-  pwd = st.text_input("Προσωπικός Κωδικός", type="password")
-  if st.button("Είσοδος", use_container_width=True):
-    if "passwords" in st.secrets and pwd in st.secrets["passwords"]:
-      st.session_state.password_correct = True
-      st.session_state.username = st.secrets["passwords"][pwd]
-      st.rerun()
-  return False
-
-if not check_password(): st.stop()
 
 # --- UTILITIES ---
 @st.cache_data(ttl=86400)
@@ -162,7 +137,32 @@ if "track" in st.query_params:
     st.stop()
 # ==========================================
 
+# --- SESSION STATE INIT (ΓΙΑ ALUMIL USERS) ---
+if "password_correct" not in st.session_state: st.session_state.password_correct = False
+if "user_plate" not in st.session_state: st.session_state.user_plate = None
+if "loading_date" not in st.session_state: st.session_state.loading_date = None
+if "username" not in st.session_state: st.session_state.username = None
+if "route_data" not in st.session_state: st.session_state.route_data = []
+if "route_geom" not in st.session_state: st.session_state.route_geom = None
+if "start_time" not in st.session_state: st.session_state.start_time = None
+if "draft_sequence" not in st.session_state: st.session_state.draft_sequence = None
+if "filter_plate" not in st.session_state: st.session_state.filter_plate = "Όλα"
+if "filter_date" not in st.session_state: st.session_state.filter_date = "Όλες"
 
+# --- LOGIN SCREEN ---
+def check_password():
+  if st.session_state.password_correct: return True
+  st.set_page_config(initial_sidebar_state="expanded") if not st.session_state.password_correct else None
+  st.title("🔐 Alumil Secure Login")
+  pwd = st.text_input("Προσωπικός Κωδικός", type="password")
+  if st.button("Είσοδος", use_container_width=True):
+    if "passwords" in st.secrets and pwd in st.secrets["passwords"]:
+      st.session_state.password_correct = True
+      st.session_state.username = st.secrets["passwords"][pwd]
+      st.rerun()
+  return False
+
+if not check_password(): st.stop()
 
 
 # --- DATA PIPELINE ---
