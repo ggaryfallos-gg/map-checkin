@@ -543,6 +543,6 @@ if app_mode == "🚛 Driver Terminal":
 
 # --- 2. ADMIN DASHBOARD ---
 elif app_mode == "📊 Admin Dashboard":
-  st.title("Admin Control Panel")
-  logs = conn.read(spreadsheet=LOG_URL, ttl=0)
-  st.dataframe(logs.tail(20), use_container_width=True)
+    st.title("Admin Control Panel")
+    logs = conn.read(spreadsheet=LOG_URL, ttl=0)
+    st.dataframe(logs.tail(20), use_container_width=True)
