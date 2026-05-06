@@ -9,7 +9,7 @@ from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
 # --- ΡΥΘΜΙΣΕΙΣ ΕΦΑΡΜΟΓΗΣ ---
-st.set_page_config(page_title="Alumil Logistics Hub v12", layout="wide")
+st.set_page_config(page_title="Alumil Logistics Hub v13", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Google Sheets URLs
@@ -20,6 +20,7 @@ LOG_URL = "https://docs.google.com/spreadsheets/d/1NSB1XvK8PX0DOAK5OgjDGQxvHpdL1
 # --- ΑΡΧΙΚΟΠΟΙΗΣΗ SESSION STATE ---
 if "password_correct" not in st.session_state: st.session_state.password_correct = False
 if "user_plate" not in st.session_state: st.session_state.user_plate = None
+if "display_plate" not in st.session_state: st.session_state.display_plate = None
 if "start_time" not in st.session_state: st.session_state.start_time = None
 if "username" not in st.session_state: st.session_state.username = None
 if "route_geom" not in st.session_state: st.session_state.route_geom = None
@@ -80,40 +81,45 @@ def load_data():
     fleet['Label'] = fleet.apply(lambda r: f"{r['Truck License Plate']} ({int(r['Dests'])} Στάσεις)", axis=1)
     return fleet.sort_values(by='Dests', ascending=False), shipments
 
-# --- ΕΚΤΕΛΕΣΗ UI ---
-fleet, all_shipments = load_data()
+fleet_info, all_shipments = load_data()
 
-# SIDEBAR INFO
-st.sidebar.write(f"👤 {st.session_state.username}")
-if st.session_state.user_plate:
-    st.sidebar.write(f"🚚 {st.session_state.display_plate}")
-
-# ΕΠΙΛΟΓΗ MODE (DRIVER ή ADMIN)
-app_mode = st.sidebar.selectbox("Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
+# --- SIDEBAR & MENU ---
+st.sidebar.title("Alumil Menu")
+st.sidebar.write(f"👤 Χρήστης: **{st.session_state.username}**")
+app_mode = st.sidebar.radio("Επιλογή Λειτουργίας", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
 
 if st.sidebar.button("Logout"):
     st.session_state.password_correct = False
+    st.session_state.user_plate = None
     st.rerun()
 
 # --- 1. DRIVER TERMINAL ---
 if app_mode == "🚛 Driver Terminal":
     if st.session_state.user_plate is None:
         st.title("Έναρξη Βάρδιας")
-        sel = st.selectbox("Επιλογή Οχήματος", fleet['Label'])
-        if st.button("Initialize", type="primary", use_container_width=True):
-            row = fleet[fleet['Label'] == sel].iloc[0]
+        sel = st.selectbox("Επιλέξτε Φορτηγό", fleet_info['Label'])
+        if st.button("Επιβεβαίωση Οχήματος", type="primary", use_container_width=True):
+            row = fleet_info[fleet_info['Label'] == sel].iloc[0]
             st.session_state.user_plate = row['Plate_Clean']
             st.session_state.display_plate = row['Truck License Plate']
             st.rerun()
     else:
+        st.subheader(f"🚚 Ενεργό Όχημα: {st.session_state.display_plate}")
         user_data = all_shipments[all_shipments['Plate_Clean'] == st.session_state.user_plate]
         gps = get_geolocation()
         curr_loc = (gps['coords']['latitude'], gps['coords']['longitude']) if gps and 'coords' in gps else (41.0, 22.8)
 
-        tab1, tab2, tab3 = st.tabs(["🌎 Χάρτης & Δρομολόγηση", "📦 POD Protocol", "📊 Analytics"])
+        tab1, tab2, tab3, tab4 = st.tabs(["🌎 Χάρτης", "🗺️ Δρομολόγηση", "📦 POD Protocol", "📊 Analytics"])
 
         with tab1:
-            if st.button("🚀 Υπολογισμός Οδικής Διαδρομής", use_container_width=True):
+            m1 = folium.Map(location=curr_loc, zoom_start=7)
+            for _, r in user_data.drop_duplicates(subset=['City_Clean']).iterrows():
+                if pd.notna(r['Latitude']):
+                    folium.Marker([r['Latitude'], r['Longitude']], popup=r['City_Clean']).add_to(m1)
+            st_folium(m1, width="100%", height=450, key="ov_map")
+
+        with tab2:
+            if st.button("🚀 Υπολογισμός Οδικής Διαδρομής (OSRM)", use_container_width=True):
                 stops = user_data.drop_duplicates(subset=['City_Clean']).dropna(subset=['Latitude'])
                 pts = [curr_loc]
                 unvisited = stops.copy()
@@ -128,65 +134,66 @@ if app_mode == "🚛 Driver Terminal":
                     st.rerun()
 
             if st.session_state.route_geom:
-                m = folium.Map(location=curr_loc, zoom_start=7)
-                folium.PolyLine(st.session_state.route_geom, color="blue", weight=5).add_to(m)
+                m2 = folium.Map(location=curr_loc, zoom_start=7)
+                folium.PolyLine(st.session_state.route_geom, color="blue", weight=5).add_to(m2)
                 for i, p in enumerate(st.session_state.route_pts):
-                    folium.Marker(p, popup=f"Στάση {i}", icon=folium.Icon(color='red' if i==0 else 'blue')).add_to(m)
-                st_folium(m, width="100%", height=500, key="road_map")
+                    folium.Marker(p, popup=f"Στάση {i}", icon=folium.Icon(color='red' if i==0 else 'blue')).add_to(m2)
+                st_folium(m2, width="100%", height=500, key="road_map")
                 st.success(f"Απόσταση: {st.session_state.route_km:.1f} km")
 
-        with tab2:
+        with tab3:
             cust = st.selectbox("Επιλογή Πελάτη", sorted(user_data['Name'].unique()))
-            use_camera = st.checkbox("Άνοιγμα Κάμερας")
-            photo = st.camera_input("📸 Φωτογραφία") if use_camera else None
+            cust_rows = user_data[user_data['Name'] == cust]
+            use_cam = st.checkbox("Άνοιγμα Κάμερας")
+            photo = st.camera_input("📸 Φωτογραφία") if use_cam else None
             
-            col1, col2 = st.columns(2)
-            if col1.button("▶️ Άφιξη", use_container_width=True):
+            c1, c2 = st.columns(2)
+            if c1.button("▶️ Άφιξη", use_container_width=True):
                 st.session_state.start_time = datetime.now()
-            if col2.button("⏹️ Sync POD", type="primary", use_container_width=True):
+                st.toast("Η ώρα άφιξης καταγράφηκε.")
+            if c2.button("⏹️ Sync POD", type="primary", use_container_width=True):
                 if st.session_state.start_time:
                     dur = (datetime.now() - st.session_state.start_time).total_seconds() / 60
-                    # Sync Logic
+                    p_kg = cust_rows[['Unpainted', 'White', 'Colored']].sum().sum()
+                    a_kg = cust_rows['Accessories'].sum()
                     new_log = pd.DataFrame([{
                         "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 
                         "Driver": st.session_state.username, "Plate": st.session_state.display_plate, 
-                        "Customer": cust, "Unload_Mins": round(dur, 1), "Photo": "Yes" if photo else "No"
+                        "Customer": cust, "Profiles_KG": p_kg, "Accessories_KG": a_kg,
+                        "Transit_Mins": 0, "Unload_Mins": round(dur, 1), 
+                        "Checkin_Lat": curr_loc[0], "Checkin_Lon": curr_loc[1], "Photo": "Yes" if photo else "No"
                     }])
                     conn.update(spreadsheet=LOG_URL, data=pd.concat([conn.read(spreadsheet=LOG_URL, ttl=0), new_log], ignore_index=True))
-                    st.success("Συγχρονίστηκε!")
+                    st.success("✅ Συγχρονίστηκε!")
                     st.session_state.start_time = None
+                else: st.error("❌ Πατήστε 'Άφιξη' πρώτα!")
+
+        with tab4:
+            st.subheader("Executive Analytics")
+            tot_kg = user_data['Total KG'].sum()
+            p_kg = user_data[['Unpainted', 'White', 'Colored']].sum().sum()
+            a_kg = user_data['Accessories'].sum()
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Συνολικό Βάρος", f"{tot_kg:,.1f} KG")
+            c2.metric("Προφίλ", f"{p_kg:,.1f} KG")
+            c3.metric("Εξαρτήματα", f"{a_kg:,.1f} KG")
+            st.divider()
+            st.progress(min(tot_kg/24000, 1.0))
+            st.caption(f"Payload Factor: {(tot_kg/24000)*100:.1f}%")
 
 # --- 2. ADMIN DASHBOARD ---
 elif app_mode == "📊 Admin Dashboard":
-    st.title("Συγκεντρωτικά Logs & Φωτογραφίες")
-    
-    # Φόρτωση Logs από το Google Sheets
+    st.title("Admin Control Panel")
     logs_df = conn.read(spreadsheet=LOG_URL, ttl=0)
+    st.subheader("Recent Activity Logs")
+    st.dataframe(logs_df.tail(20), use_container_width=True)
     
-    # Φίλτρα
-    col_f1, col_f2 = st.columns(2)
-    with col_f1:
-        f_driver = st.multiselect("Φίλτρο Οδηγού", logs_df['Driver'].unique())
-    with col_f2:
-        f_plate = st.multiselect("Φίλτρο Πινακίδας", logs_df['Plate'].unique())
-    
-    filtered_df = logs_df.copy()
-    if f_driver: filtered_df = filtered_df[filtered_df['Driver'].isin(f_driver)]
-    if f_plate: filtered_df = filtered_df[filtered_df['Plate'].isin(f_plate)]
-    
-    # Εμφάνιση Πίνακα
-    st.dataframe(filtered_df, use_container_width=True)
-    
-    # Transit Log (GPS Tracking)
     st.divider()
-    st.subheader("📍 Ιστορικό Στιγμάτων (Transit Log)")
+    st.subheader("📍 Live Fleet Tracking (Transit Log)")
     transit_df = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
-    st.write("Τελευταία στίγματα από MacroDroid:")
-    st.dataframe(transit_df.tail(10), use_container_width=True)
-
-    # Map με τα τελευταία στίγματα
     if not transit_df.empty:
+        st.dataframe(transit_df.tail(10), use_container_width=True)
         m_admin = folium.Map(location=[transit_df['Latitude'].iloc[-1], transit_df['Longitude'].iloc[-1]], zoom_start=6)
-        for _, r in transit_df.tail(20).iterrows():
-            folium.CircleMarker([r['Latitude'], r['Longitude']], radius=5, color='green', fill=True, popup=f"{r['Driver']} - {r['Timestamp']}").add_to(m_admin)
+        for _, r in transit_df.tail(15).iterrows():
+            folium.Marker([r['Latitude'], r['Longitude']], popup=f"{r['Driver']} ({r['Timestamp']})", icon=folium.Icon(color='green', icon='truck', prefix='fa')).add_to(m_admin)
         st_folium(m_admin, width="100%", height=400, key="admin_map")
