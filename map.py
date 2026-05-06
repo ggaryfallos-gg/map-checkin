@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIG & TIMEZONE ---
-st.set_page_config(page_title="Alumil Logistics Hub v20", layout="wide")
+st.set_page_config(page_title="Alumil Logistics Hub v21", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
 GR_TIME = timezone(timedelta(hours=3))
 
@@ -54,12 +54,10 @@ def get_osrm_data(coords):
     return None, 0, 0
 
 def clean_val(v):
-    # System logic: Μετατρέπει 1.500,50 σε 1500.50 για να μπορεί να κάνει πράξεις
     try: return float(str(v).replace('.', '').replace(',', '.'))
     except: return 0.0
 
 def gr_num(val, decimals=1):
-    # UI logic: Εμφανίζει το νούμερο με τελεία στις χιλιάδες και κόμμα στα δεκαδικά
     s = f"{val:,.{decimals}f}"
     return s.replace(',', 'X').replace('.', ',').replace('X', '.')
 
@@ -106,7 +104,6 @@ if app_mode == "🚛 Driver Terminal":
             row = fleet_info[fleet_info['Label'] == sel].iloc[0]
             st.session_state.user_plate = row['Plate_Clean']
             st.session_state.display_plate = row['Truck License Plate']
-            # Πλήρης καθαρισμός μνήμης για το νέο όχημα
             st.session_state.draft_sequence = None
             st.session_state.route_data = []
             st.session_state.route_geom = None
@@ -146,12 +143,10 @@ if app_mode == "🚛 Driver Terminal":
                     seq_list.append({'name': row['Name'], 'city': row['City_x'], 'kg': row['Total KG'], 'unload': un_time, 'coords': (row['Latitude'], row['Longitude'])})
                     unvisited = unvisited.drop(index=idx)
                 
-                # Δημιουργία Draft Sequence για Ad-Hoc Edit
                 draft_df = pd.DataFrame([{'Name': s['name'], 'City': s['city'], 'KG': s['kg'], 'Latitude': s['coords'][0], 'Longitude': s['coords'][1]} for s in seq_list])
                 draft_df.insert(0, 'Σειρά', range(1, len(draft_df) + 1))
                 st.session_state.draft_sequence = draft_df
 
-                # Υπολογισμός χαρτών & χρόνων για την αυτόματη πρόταση
                 for i in range(len(seq_list)):
                     _, _, d_min = get_osrm_data([pts[i], pts[i+1]])
                     seq_list[i]['drive_to'] = d_min
@@ -188,16 +183,12 @@ if app_mode == "🚛 Driver Terminal":
                     st.write(f"**{i+1}. {s['name']}** ({s['city']}): 🚛 ~{int(s['drive_to'])}' | 🏗️ ~{int(s['unload'])}' (Φορτίο: {gr_num(s['kg'], 0)} KG)")
                 
                 m2 = folium.Map(location=curr_loc, zoom_start=7)
-                
-                # Αφετηρία
                 folium.Marker(curr_loc, popup="Αφετηρία", tooltip="Αφετηρία", icon=folium.Icon(color='green', icon='play')).add_to(m2)
 
                 if st.session_state.route_geom:
                     folium.PolyLine([[l, lon] for lon, l in st.session_state.route_geom], color="#007bff", weight=5, opacity=0.8).add_to(m2)
-                    
                     for i, s in enumerate(st.session_state.route_data):
                         seq_num = i + 1
-                        # Custom Pin με Αριθμό και Χρώμα
                         pin_html = f'''
                             <div style="background-color:#E3000F; color:white; border-radius:50%; width:28px; height:28px; 
                                         display:flex; justify-content:center; align-items:center; font-weight:bold; 
@@ -212,7 +203,6 @@ if app_mode == "🚛 Driver Terminal":
                             icon=folium.DivIcon(html=pin_html, icon_size=(28, 28), icon_anchor=(14, 14))
                         ).add_to(m2)
                 
-                # Το hash key εγγυάται ότι αν αλλάξεις σειρά, ο παλιός χάρτης διαγράφεται εντελώς και σχεδιάζεται από την αρχή
                 map_key = f"routing_map_{hash(str(st.session_state.route_data))}"
                 st_folium(m2, width="100%", height=450, key=map_key)
 
@@ -227,6 +217,7 @@ if app_mode == "🚛 Driver Terminal":
             c1, c2 = st.columns(2)
             if c1.button("▶️ Άφιξη", use_container_width=True):
                 st.session_state.start_time = datetime.now(GR_TIME)
+                st.success("Η ώρα άφιξης καταγράφηκε επιτυχώς.")
             if c2.button("⏹️ Sync POD", type="primary", use_container_width=True):
                 if st.session_state.start_time:
                     dur = (datetime.now(GR_TIME) - st.session_state.start_time).total_seconds() / 60
@@ -239,9 +230,9 @@ if app_mode == "🚛 Driver Terminal":
                         "Unload_Mins": round(dur, 1), "Photo": "Yes" if photo else "No"
                     }])
                     conn.update(spreadsheet=LOG_URL, data=pd.concat([conn.read(spreadsheet=LOG_URL, ttl=0), new_log], ignore_index=True))
-                    st.success("Συγχρονίστηκε!")
+                    st.success("Το POD συγχρονίστηκε επιτυχώς!")
                     st.session_state.start_time = None
-                else: st.error("Πατήστε 'Άφιξη'!")
+                else: st.error("Πατήστε 'Άφιξη' πρώτα!")
 
         with tab4:
             tot = user_data['Total KG'].sum()
@@ -255,18 +246,47 @@ if app_mode == "🚛 Driver Terminal":
             st.caption(f"Load Factor: {gr_num((tot/24000)*100, 1)}%")
 
         with tab5:
-            st.subheader("📩 Ειδοποίηση Επόμενου")
+            st.subheader("📩 Ειδοποίηση Επόμενου Πελάτη")
             if st.session_state.route_data:
                 names = [s['name'] for s in st.session_state.route_data]
                 if active_cust in names:
                     idx = names.index(active_cust)
                     if idx < len(st.session_state.route_data) - 1:
-                        nxt = st.session_state.route_data[idx+1]
-                        total_wait = int(next(s['unload'] for s in st.session_state.route_data if s['name'] == active_cust) + nxt['drive_to'])
-                        body = f"Alumil Logistics: Εκφόρτωση σε εξέλιξη. Εκτιμώμενη άφιξη σε εσάς σε περίπου {total_wait} λεπτά."
-                        st.info(body)
-                        link = f"mailto:?subject=Alumil Delivery&body={urllib.parse.quote(body)}"
-                        st.markdown(f'<a href="{link}" target="_blank" style="padding:15px; background-color:#007bff; color:white; border-radius:8px; text-decoration:none;">📧 Mail to Next Customer</a>', unsafe_allow_html=True)
+                        nxt_cust = st.session_state.route_data[idx+1]
+                        nxt_name = nxt_cust['name']
+                        
+                        # Ανάκτηση των ποσοτήτων για τον επόμενο πελάτη
+                        nxt_rows = user_data[user_data['Name'] == nxt_name]
+                        nxt_prof = nxt_rows[['Unpainted', 'White', 'Colored']].sum().sum()
+                        nxt_acc = nxt_rows['Accessories'].sum()
+                        nxt_tot = nxt_cust['kg']
+                        
+                        curr_unload = next(s['unload'] for s in st.session_state.route_data if s['name'] == active_cust)
+                        total_wait = int(curr_unload + nxt_cust['drive_to'])
+                        
+                        subject = f"Αναμενόμενη Παράδοση Alumil - {nxt_name}"
+                        body_ui = f"""Αγαπητέ συνεργάτη ({nxt_name}),
+
+Ενημέρωση από την Alumil: Η εκφόρτωση στον προηγούμενο σταθμό βρίσκεται σε εξέλιξη. Η εκτιμώμενη άφιξη στις εγκαταστάσεις σας είναι σε περίπου **{total_wait} λεπτά**.
+
+📦 **Στοιχεία Παράδοσης:**
+*   Προφίλ: {gr_num(nxt_prof, 1)} KG
+*   Εξαρτήματα: {gr_num(nxt_acc, 1)} KG
+*   **Σύνολο: {gr_num(nxt_tot, 1)} KG**
+
+🚚 Όχημα Εξυπηρέτησης: {st.session_state.display_plate}"""
+                        
+                        st.info(body_ui)
+                        
+                        # Email Body Formatted for Mailto (Url Encoding)
+                        body_mail = f"Αγαπητέ συνεργάτη ({nxt_name}),\n\nΕνημέρωση από την Alumil: Η εκφόρτωση στον προηγούμενο σταθμό βρίσκεται σε εξέλιξη. Η εκτιμώμενη άφιξη στις εγκαταστάσεις σας είναι σε περίπου {total_wait} λεπτά.\n\nΣτοιχεία Παράδοσης:\n- Προφίλ: {gr_num(nxt_prof, 1)} KG\n- Εξαρτήματα: {gr_num(nxt_acc, 1)} KG\n- Σύνολο: {gr_num(nxt_tot, 1)} KG\n\nΌχημα Εξυπηρέτησης: {st.session_state.display_plate}\n\nΕυχαριστούμε για τη συνεργασία."
+                        
+                        link = f"mailto:?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body_mail)}"
+                        st.markdown(f'<a href="{link}" target="_blank" style="padding:15px; background-color:#007bff; color:white; border-radius:8px; text-decoration:none;">📧 Email Ειδοποίησης στον επόμενο</a>', unsafe_allow_html=True)
+                    else:
+                        st.success("🏁 Αυτός είναι ο τελευταίος πελάτης στο δρομολόγιο. Δεν απαιτείται ειδοποίηση.")
+            else:
+                st.warning("Παρακαλώ προχωρήστε σε υπολογισμό δρομολογίου στο Tab 2 για να ενεργοποιηθούν οι ειδοποιήσεις.")
 
 # --- 2. ADMIN DASHBOARD ---
 elif app_mode == "📊 Admin Dashboard":
