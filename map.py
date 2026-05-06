@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIG & TIMEZONE ---
-st.set_page_config(page_title="Alumil Logistics Hub v37", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Alumil Logistics Hub v39", layout="wide", initial_sidebar_state="collapsed")
 conn = st.connection("gsheets", type=GSheetsConnection)
 GR_TIME = timezone(timedelta(hours=3))
 
@@ -22,7 +22,7 @@ LOG_URL = "https://docs.google.com/spreadsheets/d/1NSB1XvK8PX0DOAK5OgjDGQxvHpdL1
 CUSADDRESS_URL = "https://docs.google.com/spreadsheets/d/1k9-gCuo_BxVezLaVoagh04xfUoXfj26aH2Mf833qGMk/edit" 
 DELIVERIES_URL = "https://docs.google.com/spreadsheets/d/10uKgg3AIuSnROK2-6VnY0Rm3U4vH2xv8O4OFthgaWww/edit"
 
-# --- HELPERS ---
+# --- HELPERS / UTILITIES ---
 @st.cache_data(ttl=86400)
 def geocode_address(street, city):
     if not street or str(street).lower() in ['nan', 'none', '']: return None, None
@@ -39,7 +39,6 @@ def geocode_address(street, city):
     return None, None
 
 def get_osrm_data(coords):
-    """Επιστρέφει Geometry, Distance (km), Duration (min)"""
     if len(coords) < 2: return None, 0, 0
     locs = ";".join([f"{lon},{lat}" for lat, lon in coords])
     url = f"http://router.project-osrm.org/route/v1/driving/{locs}?overview=full&geometries=geojson"
@@ -64,7 +63,7 @@ def gr_num(val, decimals=1):
     return s.replace(',', 'X').replace('.', ',').replace('X', '.')
 
 # ==========================================
-# 🛑 PUBLIC VIEW: SMART LIVE TRACKING (CUSTOMERS)
+# 🛑 PUBLIC VIEW: SMART LIVE TRACKING
 # ==========================================
 if "track" in st.query_params:
     tracked_plate = st.query_params["track"].upper().replace(' ', '')
@@ -90,7 +89,7 @@ if "track" in st.query_params:
         target = pending.iloc[0]
         st.subheader(f"Προορισμός: {target['Name']}")
 
-        # 2. GPS Data Cleaning
+        # 2. GPS Data & Geofencing
         transit_logs['Plate_Clean'] = transit_logs['Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
         v_log = transit_logs[transit_logs['Plate_Clean'] == tracked_plate].copy()
         v_log['Latitude'] = pd.to_numeric(v_log['Latitude'], errors='coerce')
@@ -98,48 +97,42 @@ if "track" in st.query_params:
         v_log = v_log.dropna(subset=['Latitude', 'Longitude'])
 
         if not v_log.empty:
-            recent = v_log.tail(10) # Παίρνουμε τα τελευταία 10 σημεία
+            recent = v_log.tail(10)
             curr_pos = (recent.iloc[-1]['Latitude'], recent.iloc[-1]['Longitude'])
             
-            # Εύρεση συντεταγμένων στόχου
+            # Fallback coords για τον πελάτη
             t_lat, t_lon = geocode_address(target.get('Street', ''), target['City'])
             
             if t_lat:
                 dist = geodesic(curr_pos, (t_lat, t_lon)).km
-                
-                # 3. GEOFENCING (20km Rule)
                 if dist > 20:
-                    st.warning(f"🚚 Το φορτηγό απέχει {int(dist)} χλμ. Ο χάρτης θα ενεργοποιηθεί μόλις πλησιάσει στα 20 χλμ.")
+                    st.warning(f"🚚 Το φορτηγό απέχει {int(dist)} χλμ. Ο χάρτης ενεργοποιείται κάτω από τα 20 χλμ.")
                 else:
-                    st.info(f"✨ Το φορτηγό πλησιάζει! Απόσταση: {gr_num(dist, 1)} χλμ.")
+                    st.success(f"✨ Το φορτηγό πλησιάζει! Απόσταση: {gr_num(dist, 1)} χλμ.")
                     m_pub = folium.Map(location=curr_pos, zoom_start=14)
-                    
-                    # 4. OSRM DRIVING PATH (Breadcrumbs)
                     c_list = [[r['Latitude'], r['Longitude']] for _, r in recent.iterrows()]
                     geom, _, _ = get_osrm_data(c_list)
-                    if geom:
-                        folium.PolyLine([[p[1], p[0]] for p in geom], color="#E3000F", weight=5, opacity=0.8).add_to(m_pub)
-                    
+                    if geom: folium.PolyLine([[p[1], p[0]] for p in geom], color="#E3000F", weight=5).add_to(m_pub)
                     folium.Marker(curr_pos, icon=folium.Icon(color='red', icon='truck', prefix='fa')).add_to(m_pub)
                     folium.Marker([t_lat, t_lon], icon=folium.Icon(color='green', icon='home')).add_to(m_pub)
-                    st_folium(m_pub, width="100%", height=500, key="public_map")
-            else:
-                st.warning("Υπολογισμός θέσης προορισμού...")
-        else:
-            st.warning("Αναμονή για λήψη σήματος GPS...")
-    except Exception as e:
-        st.error(f"Tracking Error: {e}")
+                    st_folium(m_pub, width="100%", height=500)
+            else: st.warning("Υπολογισμός θέσης...")
+        else: st.warning("Αναμονή για σήμα GPS...")
+    except Exception as e: st.error(f"Tracking Error: {e}")
     st.stop()
 
 # ==========================================
-# 🚛 PRIVATE VIEW: DRIVER TERMINAL (LOGIN)
+# 🚛 PRIVATE VIEW: DRIVER & ADMIN
 # ==========================================
 if "password_correct" not in st.session_state: st.session_state.password_correct = False
 if "user_plate" not in st.session_state: st.session_state.user_plate = None
+if "sel_date" not in st.session_state: st.session_state.sel_date = "Όλες"
 if "filter_plate" not in st.session_state: st.session_state.filter_plate = "Όλα"
 if "filter_date" not in st.session_state: st.session_state.filter_date = "Όλες"
 if "route_data" not in st.session_state: st.session_state.route_data = []
+if "route_geom" not in st.session_state: st.session_state.route_geom = None
 if "draft_sequence" not in st.session_state: st.session_state.draft_sequence = None
+if "start_time" not in st.session_state: st.session_state.start_time = None
 
 def check_password():
     if st.session_state.password_correct: return True
@@ -169,19 +162,24 @@ def load_master_data():
         dels = conn.read(spreadsheet=DELIVERIES_URL, ttl=300)
         dels.columns = dels.columns.str.strip()
         dels['Delivery'] = dels['Delivery'].astype(str).str.strip().str.replace('.0', '', regex=False).str.lstrip('0')
-        ship = pd.merge(ship, dels[['Delivery', 'Act. Gds Mvmnt Date']].drop_duplicates('Delivery'), on='Delivery', how='left')
+        dels_sub = dels[['Delivery', 'Act. Gds Mvmnt Date']].drop_duplicates('Delivery')
+        ship = pd.merge(ship, dels_sub, on='Delivery', how='left')
         ship['Loading_Date'] = ship['Act. Gds Mvmnt Date'].fillna('Άγνωστη Ημ/νία').astype(str)
+        ship['Loading_Date'] = ship['Loading_Date'].replace(['nan', 'NaT', 'None', ''], 'Άγνωστη Ημ/νία')
     except: ship['Loading_Date'] = 'Άγνωστη Ημ/νία'
 
     try:
         cus = conn.read(spreadsheet=CUSADDRESS_URL, ttl=300)
         cus.columns = cus.columns.str.strip()
+        for col in ['Name', 'Street', 'Telephone 1', 'Latitude', 'Longitude']:
+            if col not in cus.columns: cus[col] = ''
         cus['Latitude'] = pd.to_numeric(cus['Latitude'], errors='coerce')
         cus['Longitude'] = pd.to_numeric(cus['Longitude'], errors='coerce')
         df = pd.merge(ship, cus[['Name', 'Street', 'Telephone 1', 'Latitude', 'Longitude']].drop_duplicates('Name'), on='Name', how='left')
     except: df = ship.copy()
 
     coords_db = conn.read(spreadsheet=COORDS_URL, ttl=300)
+    coords_db.columns = coords_db.columns.str.strip()
     coords_db['City_Match'] = coords_db['City'].astype(str).str.strip().str.upper()
     df = pd.merge(df, coords_db[['City_Match', 'Latitude', 'Longitude']].rename(columns={'Latitude':'Lat_city', 'Longitude':'Lon_city'}), left_on='City_Clean', right_on='City_Match', how='left')
     
@@ -189,15 +187,27 @@ def load_master_data():
     df['Final_Lon'] = df['Longitude'].fillna(df['Lon_city'])
     
     fleet = df.groupby(['Truck License Plate', 'Plate_Clean', 'Loading_Date'])['Name'].nunique().reset_index(name='Dests')
-    return fleet, df
+    unique_routes = df[['Truck License Plate', 'Plate_Clean', 'Loading_Date']].drop_duplicates()
+    fleet_summary = pd.merge(unique_routes, fleet, on=['Truck License Plate', 'Plate_Clean', 'Loading_Date'], how='left').fillna(0)
+    return fleet_summary, df
 
 fleet_info, all_data = load_master_data()
 
+def reset_shift():
+    st.session_state.user_plate = None
+    st.session_state.loading_date = None
+    st.session_state.sel_date = "Όλες"
+    st.session_state.route_data = []
+    st.session_state.route_geom = None
+    st.session_state.draft_sequence = None
+    st.session_state.start_time = None
+
 # --- SIDEBAR ---
 st.sidebar.title("Alumil Hub")
+st.sidebar.write(f"👤 **{st.session_state.username}**")
 app_mode = st.sidebar.radio("Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
 if st.sidebar.button("🔄 Αλλαγή Οχήματος"):
-    st.session_state.user_plate = None
+    reset_shift()
     st.rerun()
 
 # --- 1. DRIVER TERMINAL ---
@@ -205,47 +215,47 @@ if app_mode == "🚛 Driver Terminal":
     if st.session_state.user_plate is None:
         st.title("Επιλογή Δρομολογίου")
         
-        # Interactive Filtering
+        col1, col2 = st.columns(2)
         avail_dates = ["Όλες"] + sorted(fleet_info['Loading_Date'].unique().tolist())
-        sel_date = st.selectbox("📅 Ημερομηνία", avail_dates)
-        f_fleet = fleet_info[fleet_info['Loading_Date'] == sel_date] if sel_date != "Όλες" else fleet_info
+        date_sel = col2.selectbox("📅 Ημερομηνία", avail_dates, index=avail_dates.index(st.session_state.filter_date))
         
-        plate_opts = [f"{r['Truck License Plate']} ({int(r['Dests'])} Στάσεις)" for _, r in f_fleet.iterrows()]
-        sel_p_disp = st.selectbox("🚚 Φορτηγό", plate_opts)
-        
+        f_fleet = fleet_info[fleet_info['Loading_Date'] == date_sel] if date_sel != "Όλες" else fleet_info
+        plate_options = ["Όλλα"] + [f"{r['Truck License Plate']} ({int(r['Dests'])} Στάσεις)" for _, r in f_fleet.iterrows()]
+        sel_p_disp = col1.selectbox("🚚 Φορτηγό", plate_options)
+
         if st.button("🚀 Έναρξη Βάρδιας", type="primary", use_container_width=True):
-            st.session_state.user_plate = sel_p_disp.split(' (')[0].replace(' ', '').upper()
-            st.session_state.display_plate = sel_p_disp.split(' (')[0]
-            st.session_state.sel_date = sel_date
-            st.rerun()
+            if sel_p_disp != "Όλλα":
+                selected = f_fleet[f_fleet['Truck License Plate'] == sel_p_disp.split(' (')[0]].iloc[0]
+                st.session_state.user_plate = selected['Plate_Clean']
+                st.session_state.display_plate = selected['Truck License Plate']
+                st.session_state.loading_date = selected['Loading_Date']
+                st.session_state.sel_date = date_sel
+                st.rerun()
     else:
-        user_data = all_data[all_data['Plate_Clean'] == st.session_state.user_plate]
-        if st.session_state.sel_date != "Όλες":
-            user_data = user_data[user_data['Loading_Date'] == st.session_state.sel_date]
-        
+        user_data = all_data[(all_data['Plate_Clean'] == st.session_state.user_plate) & (all_data['Loading_Date'] == st.session_state.loading_date)].copy()
         gps = get_geolocation()
         curr_loc = (gps['coords']['latitude'], gps['coords']['longitude']) if gps else (40.64, 22.94)
 
-        # Auto-Geocoding Engine
+        # Batch Geocoding & Auto-Save
         new_coords = []
         for idx, row in user_data.iterrows():
             if pd.isna(row['Latitude']) and str(row.get('Street','')).lower() not in ['nan','']:
                 lat, lon = geocode_address(row['Street'], row['City'])
                 if lat:
-                    user_data.at[idx, 'Final_Lat'] = lat
-                    user_data.at[idx, 'Final_Lon'] = lon
+                    user_data.at[idx, 'Final_Lat'], user_data.at[idx, 'Final_Lon'] = lat, lon
                     new_coords.append({'Name': row['Name'], 'Latitude': lat, 'Longitude': lon})
 
         if new_coords:
-            with st.spinner("Ενημέρωση τοποθεσιών..."):
+            with st.spinner("Ενημέρωση χάρτη..."):
                 master_cus = conn.read(spreadsheet=CUSADDRESS_URL, ttl=0)
                 for nc in new_coords:
                     master_cus.loc[master_cus['Name'] == nc['Name'], ['Latitude', 'Longitude']] = [nc['Latitude'], nc['Longitude']]
                 conn.update(spreadsheet=CUSADDRESS_URL, data=master_cus)
+                st.toast("✅ Νέες διευθύνσεις αποθηκεύτηκαν!")
 
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD", "📊 Analytics", "📩 Ειδοποίηση"])
+        t1, t2, t3, t4, t5 = st.tabs(["🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD Protocol", "📊 Analytics", "📩 Ειδοποίηση"])
         
-        with tab1:
+        with t1:
             m = folium.Map(location=curr_loc, zoom_start=8)
             folium.Marker(curr_loc, icon=folium.Icon(color='green', icon='truck', prefix='fa')).add_to(m)
             for _, r in user_data.drop_duplicates('Name').iterrows():
@@ -253,57 +263,89 @@ if app_mode == "🚛 Driver Terminal":
                     folium.Marker([r['Final_Lat'], r['Final_Lon']], popup=r['Name']).add_to(m)
             st_folium(m, width="100%", height=500, key="driver_map")
 
-        with tab2:
+        with t2:
             st.subheader("Βελτιστοποίηση Διαδρομής")
-            if st.button("🤖 Αυτόματη Πρόταση Σειράς", use_container_width=True):
+            if st.button("🤖 Αυτόματη Πρόταση Σειράς (OSRM)", use_container_width=True):
                 stops = user_data.drop_duplicates('Name').dropna(subset=['Final_Lat']).copy()
-                path = []
-                last = curr_loc
+                path, pts = [], [curr_loc]
                 while not stops.empty:
-                    stops['d'] = stops.apply(lambda r: geodesic(last, (r['Final_Lat'], r['Final_Lon'])).km, axis=1)
-                    next_idx = stops['d'].idxmin()
-                    row = stops.loc[next_idx]
-                    path.append({'Name': row['Name'], 'KG': row['Total KG'], 'Lat': row['Final_Lat'], 'Lon': row['Final_Lon']})
-                    last = (row['Final_Lat'], row['Final_Lon'])
-                    stops = stops.drop(next_idx)
+                    stops['d'] = stops.apply(lambda r: geodesic(pts[-1], (r['Final_Lat'], r['Final_Lon'])).km, axis=1)
+                    idx = stops['d'].idxmin()
+                    row = stops.loc[idx]
+                    path.append({'Name': row['Name'], 'Street': row['Street'], 'KG': row['Total KG'], 'Lat': row['Final_Lat'], 'Lon': row['Final_Lon']})
+                    pts.append((row['Final_Lat'], row['Final_Lon']))
+                    stops = stops.drop(idx)
+                
                 df_seq = pd.DataFrame(path)
                 df_seq.insert(0, 'Σειρά', range(1, len(df_seq)+1))
                 st.session_state.draft_sequence = df_seq
+                geom, _, _ = get_osrm_data(pts)
+                st.session_state.route_geom = geom
+                st.rerun()
 
             if st.session_state.draft_sequence is not None:
                 edited = st.data_editor(st.session_state.draft_sequence, use_container_width=True, hide_index=True)
-                if st.button("✅ Εφαρμογή Σειράς", type="primary", use_container_width=True):
+                if st.button("✅ Εφαρμογή Σειράς & Υπολογισμός", type="primary", use_container_width=True):
                     st.session_state.route_data = edited.sort_values('Σειρά').to_dict('records')
                     st.rerun()
 
             if st.session_state.route_data:
                 for i, r in enumerate(st.session_state.route_data):
                     c1, c2 = st.columns([0.7, 0.3])
-                    c1.write(f"**{i+1}. {r['Name']}**")
+                    c1.write(f"**{i+1}. {r['Name']}** ({gr_num(r['KG'],0)} KG)")
                     gmaps = f"https://www.google.com/maps/dir/?api=1&destination={r['Lat']},{r['Lon']}"
-                    c2.markdown(f"[🗺️ Nav]({gmaps})")
+                    waze = f"https://waze.com/ul?ll={r['Lat']},{r['Lon']}&navigate=yes"
+                    c2.markdown(f"[🗺️ G-Maps]({gmaps}) | [🧭 Waze]({waze})")
 
-        with tab3:
-            active_cust = st.selectbox("Πελάτης", user_data['Name'].unique())
-            if st.button("⏹️ Sync POD", type="primary", use_container_width=True):
-                new_log = pd.DataFrame([{"Timestamp": datetime.now(GR_TIME).strftime('%Y-%m-%d %H:%M:%S'), "Driver": st.session_state.username, "Plate": st.session_state.display_plate, "Customer": active_cust}])
+        with t3:
+            st.subheader("Proof of Delivery (POD)")
+            active_cust = st.selectbox("Επιλογή Πελάτη", user_data['Name'].unique())
+            c_rows = user_data[user_data['Name'] == active_cust]
+            
+            col1, col2 = st.columns(2)
+            if col1.button("▶️ Άφιξη", use_container_width=True):
+                st.session_state.start_time = datetime.now(GR_TIME)
+                st.success("Άφιξη καταγράφηκε.")
+            
+            use_cam = st.checkbox("Ενεργοποίηση Κάμερας")
+            photo = st.camera_input("📸 Φωτογραφία") if use_cam else None
+
+            if col2.button("⏹️ Sync POD", type="primary", use_container_width=True):
+                dur = (datetime.now(GR_TIME) - st.session_state.start_time).total_seconds()/60 if st.session_state.start_time else 0
+                new_log = pd.DataFrame([{
+                    "Timestamp": datetime.now(GR_TIME).strftime('%Y-%m-%d %H:%M:%S'),
+                    "Driver": st.session_state.username, 
+                    "Plate": st.session_state.display_plate, 
+                    "Customer": active_cust,
+                    "Profiles_KG": c_rows[['Unpainted', 'White', 'Colored']].sum().sum(),
+                    "Accessories_KG": c_rows['Accessories'].sum(),
+                    "Unload_Mins": round(dur, 1)
+                }])
                 conn.update(spreadsheet=LOG_URL, data=pd.concat([conn.read(spreadsheet=LOG_URL, ttl=0), new_log]))
-                st.success("POD Καταγράφηκε!")
+                st.success(f"POD Sync για {active_cust}!")
 
-        with tab4:
-            st.metric("Συνολικά Κιλά", f"{gr_num(user_data['Total KG'].sum(), 0)} KG")
+        with t4:
+            tot = user_data['Total KG'].sum()
+            prof = user_data[['Unpainted', 'White', 'Colored']].sum().sum()
+            acc = user_data['Accessories'].sum()
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Σύνολο", f"{gr_num(tot, 1)} KG")
+            c2.metric("Προφίλ", f"{gr_num(prof, 1)} KG")
+            c3.metric("Εξαρτήματα", f"{gr_num(acc, 1)} KG")
+            st.progress(min(tot/24000, 1.0))
+            st.caption(f"Load Factor: {gr_num((tot/24000)*100, 1)}%")
 
-        with tab5:
+        with t5:
             base_url = "https://map-checkin-wmw4nmixyyu8mgfrnhmusm.streamlit.app/"
             track_link = f"{base_url}?track={st.session_state.user_plate}"
-            st.info(f"Link: {track_link}")
-            if st.button("📧 Email στο επόμενο σημείο", use_container_width=True):
+            st.info(f"Tracking Link: {track_link}")
+            if st.button("📧 Email Ειδοποίησης", use_container_width=True):
                 subject = urllib.parse.quote(f"Alumil Delivery: {st.session_state.display_plate}")
                 body = urllib.parse.quote(f"Το φορτηγό μας πλησιάζει. Παρακολουθήστε το εδώ: {track_link}")
                 st.markdown(f'<a href="mailto:?subject={subject}&body={body}" style="padding:10px; background:#007bff; color:white; border-radius:5px; text-decoration:none;">📧 Αποστολή</a>', unsafe_allow_html=True)
 
 # --- 2. ADMIN DASHBOARD ---
 elif app_mode == "📊 Admin Dashboard":
-    st.title("Εποπτεία Logistics")
+    st.title("Admin Fleet Monitor")
     logs = conn.read(spreadsheet=LOG_URL, ttl=0)
     st.dataframe(logs.tail(20), use_container_width=True)
