@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIG & TIMEZONE ---
-st.set_page_config(page_title="Alumil Logistics Hub v24", layout="wide")
+st.set_page_config(page_title="Alumil Logistics Hub v27", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
 GR_TIME = timezone(timedelta(hours=3))
 
@@ -74,39 +74,50 @@ def get_osrm_data(coords):
     return None, 0, 0
 
 def clean_val(v):
-    try: return float(str(v).replace('.', '').replace(',', '.'))
+    """Ασφαλής μετατροπή αριθμών (Υποστήριξη Ελληνικού Format με κόμμα στα δεκαδικά)"""
+    if pd.isna(v): return 0.0
+    if isinstance(v, (int, float)): return float(v)
+    v_str = str(v).strip()
+    if not v_str or v_str.lower() in ['nan', 'none', '']: return 0.0
+    
+    if ',' in v_str:
+        v_str = v_str.replace('.', '')
+        v_str = v_str.replace(',', '.')
+        
+    try: return float(v_str)
     except: return 0.0
 
 def gr_num(val, decimals=1):
+    """Μετατροπή UI: Τελεία στις χιλιάδες, Κόμμα στα δεκαδικά (π.χ. 1.500,5)"""
     s = f"{val:,.{decimals}f}"
     return s.replace(',', 'X').replace('.', ',').replace('X', '.')
 
 # --- DATA PIPELINE ---
 @st.cache_data(ttl=300)
 def load_full_data():
-    # 1. Φόρτωση Shipments
     ship = conn.read(spreadsheet=SHIPMENTS_URL, ttl=300)
+    ship.columns = ship.columns.str.strip()
     ship['Plate_Clean'] = ship['Truck License Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
     ship['City_Clean'] = ship['City'].astype(str).str.strip().str.upper()
-    ship['Delivery'] = ship['Delivery'].astype(str).str.strip().str.replace('.0', '', regex=False)
+    ship['Delivery'] = ship['Delivery'].astype(str).str.strip().str.replace('.0', '', regex=False).str.lstrip('0')
+    
     for c in ['Total KG', 'Unpainted', 'White', 'Colored', 'Accessories']:
         if c in ship.columns: ship[c] = ship[c].apply(clean_val)
     
-    # 2. Φόρτωση Deliveries (ERP Join)
     try:
         dels = conn.read(spreadsheet=DELIVERIES_URL, ttl=300)
-        dels['Delivery'] = dels['Delivery'].astype(str).str.strip().str.replace('.0', '', regex=False)
+        dels.columns = dels.columns.str.strip()
+        dels['Delivery'] = dels['Delivery'].astype(str).str.strip().str.replace('.0', '', regex=False).str.lstrip('0')
         dels_sub = dels[['Delivery', 'Act. Gds Mvmnt Date']].drop_duplicates('Delivery')
         ship = pd.merge(ship, dels_sub, on='Delivery', how='left')
         ship['Loading_Date'] = ship['Act. Gds Mvmnt Date'].fillna('Άγνωστη Ημ/νία').astype(str)
-        # Καθαρισμός nan texts
-        ship['Loading_Date'] = ship['Loading_Date'].replace('nan', 'Άγνωστη Ημ/νία')
+        ship['Loading_Date'] = ship['Loading_Date'].replace(['nan', 'NaT', 'None', ''], 'Άγνωστη Ημ/νία')
     except:
         ship['Loading_Date'] = 'Άγνωστη Ημ/νία'
 
-    # 3. Φόρτωση Cusaddress
     try:
         cus_df = conn.read(spreadsheet=CUSADDRESS_URL, ttl=300)
+        cus_df.columns = cus_df.columns.str.strip()
         for col in ['Name', 'Street', 'Telephone 1', 'Postal Code']:
             if col not in cus_df.columns: cus_df[col] = ''
         cus_df = cus_df[['Name', 'Street', 'Telephone 1', 'Postal Code']].drop_duplicates('Name')
@@ -115,13 +126,12 @@ def load_full_data():
         df = ship.copy()
         df['Street'], df['Telephone 1'], df['Postal Code'] = '', '', ''
 
-    # 4. Fallback Coords
     coords = conn.read(spreadsheet=COORDS_URL, ttl=300)
+    coords.columns = coords.columns.str.strip()
     coords['City_Match'] = coords['City'].astype(str).str.strip().str.upper()
     coords = coords.rename(columns={'Latitude': 'Lat_city', 'Longitude': 'Lon_city'})
     df = pd.merge(df, coords.drop_duplicates('City_Match'), left_on='City_Clean', right_on='City_Match', how='left')
     
-    # Ομαδοποίηση βάσει Πινακίδας ΚΑΙ Ημερομηνίας Φόρτωσης
     counts = df.groupby(['Plate_Clean', 'Loading_Date'])['Name'].nunique().reset_index(name='Dests')
     unique_routes = df[['Truck License Plate', 'Plate_Clean', 'Loading_Date']].drop_duplicates()
     fleet_summary = pd.merge(unique_routes, counts, on=['Plate_Clean', 'Loading_Date'], how='left').fillna(0)
@@ -153,6 +163,10 @@ if st.sidebar.button("🚪 Logout"):
     st.session_state.password_correct = False
     st.session_state.user_plate = None
     st.session_state.loading_date = None
+    st.session_state.draft_sequence = None
+    st.session_state.route_data = []
+    st.session_state.route_geom = None
+    st.session_state.start_time = None
     st.rerun()
 
 # --- 1. DRIVER TERMINAL ---
@@ -169,13 +183,11 @@ if app_mode == "🚛 Driver Terminal":
     else:
         st.subheader(f"🚚 {st.session_state.display_plate} (Φόρτωση: {st.session_state.loading_date})")
         
-        # Απομόνωση δεδομένων χρήστη βάσει Πινακίδας ΚΑΙ Ημερομηνίας
         user_data = all_data[(all_data['Plate_Clean'] == st.session_state.user_plate) & (all_data['Loading_Date'] == st.session_state.loading_date)].copy()
         
         gps = get_geolocation()
         curr_loc = (gps['coords']['latitude'], gps['coords']['longitude']) if gps and 'coords' in gps else (41.0, 22.8)
 
-        # Δυναμικό Geocoding & Fallback
         if 'Final_Lat' not in user_data.columns:
             user_data['Final_Lat'] = user_data['Lat_city']
             user_data['Final_Lon'] = user_data['Lon_city']
@@ -197,11 +209,22 @@ if app_mode == "🚛 Driver Terminal":
             st.write("Σημεία εκφόρτωσης (Ακριβείς Διευθύνσεις):")
             m1 = folium.Map(location=curr_loc, zoom_start=7)
             folium.Marker(curr_loc, popup="Η θέση μου", icon=folium.Icon(color='green', icon='truck', prefix='fa')).add_to(m1)
+            
             for _, r in user_data.drop_duplicates(subset=['Name']).iterrows():
                 if pd.notna(r['Final_Lat']):
-                    tel_info = f"<br>📞 {r['Telephone 1']}" if str(r.get('Telephone 1', '')) not in ['nan', '', 'None'] else ""
-                    popup_html = f"<b>{r['Name']}</b><br>{r['Display_Address']}{tel_info}"
-                    folium.Marker([r['Final_Lat'], r['Final_Lon']], popup=popup_html, tooltip=f"{r['Name']}").add_to(m1)
+                    phone_raw = str(r.get('Telephone 1', ''))
+                    if phone_raw and phone_raw.lower() not in ['nan', 'none', '']:
+                        clean_phone = ''.join(c for c in phone_raw if c.isdigit() or c == '+')
+                        tel_html = f"<br><br><a href='tel:{clean_phone}' style='background-color:#28a745; color:white; padding:6px 12px; text-decoration:none; border-radius:5px; display:inline-block; font-weight:bold;'>📞 Κλήση: {phone_raw}</a>"
+                    else:
+                        tel_html = ""
+                        
+                    popup_content = f"<b>{r['Name']}</b><br>{r.get('Display_Address', '')}{tel_html}"
+                    folium.Marker(
+                        [r['Final_Lat'], r['Final_Lon']], 
+                        popup=folium.Popup(popup_content, max_width=300), 
+                        tooltip=f"{r['Name']}"
+                    ).add_to(m1)
             st_folium(m1, width="100%", height=500, key="all_points_map")
 
         with tab2:
@@ -218,10 +241,24 @@ if app_mode == "🚛 Driver Terminal":
                     row = unvisited.loc[idx]
                     pts.append((row['Final_Lat'], row['Final_Lon']))
                     un_time = (row['Total KG'] / 1000) * 10
-                    seq_list.append({'name': row['Name'], 'address': row['Display_Address'], 'kg': row['Total KG'], 'unload': un_time, 'coords': (row['Final_Lat'], row['Final_Lon'])})
+                    seq_list.append({
+                        'name': row['Name'], 
+                        'address': row['Display_Address'], 
+                        'telephone': str(row.get('Telephone 1', '')),
+                        'kg': row['Total KG'], 
+                        'unload': un_time, 
+                        'coords': (row['Final_Lat'], row['Final_Lon'])
+                    })
                     unvisited = unvisited.drop(index=idx)
                 
-                draft_df = pd.DataFrame([{'Name': s['name'], 'Address': s['address'], 'KG': s['kg'], 'Latitude': s['coords'][0], 'Longitude': s['coords'][1]} for s in seq_list])
+                draft_df = pd.DataFrame([{
+                    'Name': s['name'], 
+                    'Address': s.get('address', ''), 
+                    'Telephone': s.get('telephone', ''),
+                    'KG': s['kg'], 
+                    'Latitude': s['coords'][0], 
+                    'Longitude': s['coords'][1]
+                } for s in seq_list])
                 draft_df.insert(0, 'Σειρά', range(1, len(draft_df) + 1))
                 st.session_state.draft_sequence = draft_df
 
@@ -235,7 +272,7 @@ if app_mode == "🚛 Driver Terminal":
 
             if st.session_state.draft_sequence is not None:
                 st.info("💡 **Διπλό κλικ στη στήλη 'Σειρά'** για να αλλάξετε τη σειρά χειροκίνητα.")
-                edited_seq = st.data_editor(st.session_state.draft_sequence, hide_index=True, use_container_width=True, disabled=['Name', 'Address', 'KG', 'Latitude', 'Longitude'])
+                edited_seq = st.data_editor(st.session_state.draft_sequence, hide_index=True, use_container_width=True, disabled=['Name', 'Address', 'Telephone', 'KG', 'Latitude', 'Longitude'])
                 
                 if st.button("2. Εφαρμογή Νέας Σειράς & Χάρτη", type="primary", use_container_width=True):
                     edited_seq = edited_seq.sort_values(by='Σειρά')
@@ -243,7 +280,14 @@ if app_mode == "🚛 Driver Terminal":
                     for _, row in edited_seq.iterrows():
                         pts.append((row['Latitude'], row['Longitude']))
                         un_time = (row['KG'] / 1000) * 10
-                        final_seq.append({'name': row['Name'], 'address': row['Address'], 'kg': row['KG'], 'unload': un_time, 'coords': (row['Latitude'], row['Longitude'])})
+                        final_seq.append({
+                            'name': row['Name'], 
+                            'address': row['Address'], 
+                            'telephone': row.get('Telephone', ''),
+                            'kg': row['KG'], 
+                            'unload': un_time, 
+                            'coords': (row['Latitude'], row['Longitude'])
+                        })
                     
                     for i in range(len(final_seq)):
                         _, _, d_min = get_osrm_data([pts[i], pts[i+1]])
@@ -258,7 +302,10 @@ if app_mode == "🚛 Driver Terminal":
                 st.divider()
                 st.write("**Τελικό Δρομολόγιο:**")
                 for i, s in enumerate(st.session_state.route_data):
-                    st.write(f"**{i+1}. {s['name']}** ({s['address']}): 🚛 ~{int(s['drive_to'])}' | 🏗️ ~{int(s['unload'])}'")
+                    addr_display = s.get('address', 'Άγνωστη Διεύθυνση')
+                    drive_time = int(s.get('drive_to', 0))
+                    unload_time = int(s.get('unload', 0))
+                    st.write(f"**{i+1}. {s['name']}** ({addr_display}): 🚛 ~{drive_time}' | 🏗️ ~{unload_time}' (Φορτίο: {gr_num(s['kg'], 0)} KG)")
                 
                 m2 = folium.Map(location=curr_loc, zoom_start=7)
                 folium.Marker(curr_loc, popup="Αφετηρία", icon=folium.Icon(color='green', icon='play')).add_to(m2)
@@ -267,8 +314,23 @@ if app_mode == "🚛 Driver Terminal":
                     folium.PolyLine([[l, lon] for lon, l in st.session_state.route_geom], color="#007bff", weight=5).add_to(m2)
                     for i, s in enumerate(st.session_state.route_data):
                         seq_num = i + 1
+                        
+                        phone_raw = str(s.get('telephone', ''))
+                        if phone_raw and phone_raw.lower() not in ['nan', 'none', '']:
+                            clean_phone = ''.join(c for c in phone_raw if c.isdigit() or c == '+')
+                            tel_html = f"<br><br><a href='tel:{clean_phone}' style='background-color:#28a745; color:white; padding:6px 12px; text-decoration:none; border-radius:5px; display:inline-block; font-weight:bold;'>📞 Κλήση: {phone_raw}</a>"
+                        else:
+                            tel_html = ""
+                        
+                        popup_content = f"<b>Στάση {seq_num}: {s['name']}</b><br>{s.get('address', '')}{tel_html}"
+                        
                         pin_html = f'''<div style="background-color:#E3000F; color:white; border-radius:50%; width:28px; height:28px; display:flex; justify-content:center; align-items:center; font-weight:bold; border:2px solid white; box-shadow: 0px 2px 4px rgba(0,0,0,0.4); font-size:13px;">{seq_num}</div>'''
-                        folium.Marker([s['coords'][0], s['coords'][1]], popup=f"Στάση {seq_num}: {s['name']}", tooltip=f"{seq_num}. {s['name']}", icon=folium.DivIcon(html=pin_html, icon_size=(28, 28), icon_anchor=(14, 14))).add_to(m2)
+                        folium.Marker(
+                            [s['coords'][0], s['coords'][1]], 
+                            popup=folium.Popup(popup_content, max_width=300), 
+                            tooltip=f"{seq_num}. {s['name']}", 
+                            icon=folium.DivIcon(html=pin_html, icon_size=(28, 28), icon_anchor=(14, 14))
+                        ).add_to(m2)
                 
                 st_folium(m2, width="100%", height=450, key=f"routing_map_{hash(str(st.session_state.route_data))}")
 
@@ -324,10 +386,10 @@ if app_mode == "🚛 Driver Terminal":
                         nxt_rows = user_data[user_data['Name'] == nxt_name]
                         nxt_prof = nxt_rows[['Unpainted', 'White', 'Colored']].sum().sum()
                         nxt_acc = nxt_rows['Accessories'].sum()
-                        nxt_tot = nxt_cust['kg']
+                        nxt_tot = nxt_cust.get('kg', 0)
                         
-                        curr_unload = next(s['unload'] for s in st.session_state.route_data if s['name'] == active_cust)
-                        total_wait = int(curr_unload + nxt_cust['drive_to'])
+                        curr_unload = next(s.get('unload', 0) for s in st.session_state.route_data if s['name'] == active_cust)
+                        total_wait = int(curr_unload + nxt_cust.get('drive_to', 0))
                         
                         subject = f"Αναμενόμενη Παράδοση Alumil - {nxt_name}"
                         body_ui = f"""Αγαπητέ συνεργάτη ({nxt_name}),\n\nΗ εκφόρτωση στον προηγούμενο σταθμό βρίσκεται σε εξέλιξη. Η εκτιμώμενη άφιξη στις εγκαταστάσεις σας είναι σε περίπου **{total_wait} λεπτά**.\n\n📦 **Στοιχεία Παράδοσης:**\n* Προφίλ: {gr_num(nxt_prof, 1)} KG\n* Εξαρτήματα: {gr_num(nxt_acc, 1)} KG\n* **Σύνολο: {gr_num(nxt_tot, 1)} KG**\n\n🚚 Όχημα: {st.session_state.display_plate}"""
