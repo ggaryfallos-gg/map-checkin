@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIG & TIMEZONE ---
-st.set_page_config(page_title="Alumil Logistics Hub v32", layout="wide")
+st.set_page_config(page_title="Alumil Logistics Hub v33", layout="wide", initial_sidebar_state="collapsed")
 conn = st.connection("gsheets", type=GSheetsConnection)
 GR_TIME = timezone(timedelta(hours=3))
 
@@ -22,7 +22,62 @@ LOG_URL = "https://docs.google.com/spreadsheets/d/1NSB1XvK8PX0DOAK5OgjDGQxvHpdL1
 CUSADDRESS_URL = "https://docs.google.com/spreadsheets/d/1k9-gCuo_BxVezLaVoagh04xfUoXfj26aH2Mf833qGMk/edit" 
 DELIVERIES_URL = "https://docs.google.com/spreadsheets/d/10uKgg3AIuSnROK2-6VnY0Rm3U4vH2xv8O4OFthgaWww/edit"
 
-# --- SESSION STATE INIT ---
+
+# ==========================================
+# 🛑 PUBLIC VIEW: LIVE TRACKING (ΓΙΑ ΤΟΝ ΠΕΛΑΤΗ)
+# ==========================================
+if "track" in st.query_params:
+    tracked_plate = st.query_params["track"].upper().replace(' ', '')
+    
+    st.title("📍 Alumil Live Delivery Tracking")
+    st.write(f"Παρακολούθηση πορείας οχήματος: **{tracked_plate}**")
+    
+    # Κουμπί χειροκίνητης ανανέωσης
+    if st.button("🔄 Ανανέωση Θέσης", type="primary"):
+        st.cache_data.clear()
+        
+    try:
+        # Διαβάζει το Sheet όπου στέλνει στίγμα το MacroDroid
+        transit = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
+        transit.columns = transit.columns.str.strip()
+        
+        # Υποθέτουμε ότι υπάρχουν στήλες Plate, Latitude, Longitude, Timestamp
+        if 'Plate' in transit.columns:
+            transit['Plate_Clean'] = transit['Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
+            vehicle_log = transit[transit['Plate_Clean'] == tracked_plate]
+            
+            if not vehicle_log.empty:
+                latest = vehicle_log.iloc[-1]
+                # Ανάκτηση συντεταγμένων (υποστηρίζει Lat/Latitude)
+                lat = float(latest.get('Latitude', latest.get('Lat', 40.6401)))
+                lon = float(latest.get('Longitude', latest.get('Lon', 22.9444)))
+                last_update = latest.get('Timestamp', 'Άγνωστη ώρα')
+                
+                st.info(f"Τελευταία ενημέρωση τηλεματικής: **{last_update}**")
+                
+                # Σχεδιασμός Χάρτη Πελάτη
+                m_public = folium.Map(location=[lat, lon], zoom_start=14)
+                folium.Marker(
+                    [lat, lon], 
+                    popup=f"Alumil Delivery<br>{tracked_plate}", 
+                    tooltip="Η παραγγελία σας βρίσκεται εδώ",
+                    icon=folium.Icon(color='blue', icon='truck', prefix='fa')
+                ).add_to(m_public)
+                
+                st_folium(m_public, width="100%", height=500, key="public_tracking_map")
+            else:
+                st.warning("Το όχημα δεν εκπέμπει στίγμα αυτή τη στιγμή ή δεν έχει ξεκινήσει το δρομολόγιο.")
+        else:
+            st.error("Σφάλμα συστήματος: Δεν βρέθηκε στήλη 'Plate' στο Transit_Log.")
+    except Exception as e:
+        st.warning("Αναμονή για το πρώτο στίγμα GPS του οχήματος...")
+
+    # ΤΕΡΜΑΤΙΖΕΙ ΤΗΝ ΕΦΑΡΜΟΓΗ ΕΔΩ. Ο ΠΕΛΑΤΗΣ ΔΕΝ ΠΑΕΙ ΠΟΤΕ ΠΙΟ ΚΑΤΩ.
+    st.stop()
+# ==========================================
+
+
+# --- SESSION STATE INIT (ΓΙΑ ALUMIL USERS) ---
 if "password_correct" not in st.session_state: st.session_state.password_correct = False
 if "user_plate" not in st.session_state: st.session_state.user_plate = None
 if "loading_date" not in st.session_state: st.session_state.loading_date = None
@@ -37,6 +92,8 @@ if "filter_date" not in st.session_state: st.session_state.filter_date = "Όλε
 # --- LOGIN SCREEN ---
 def check_password():
     if st.session_state.password_correct: return True
+    # Επαναφορά του Sidebar view για τους users της εταιρείας
+    st.set_page_config(initial_sidebar_state="expanded") if not st.session_state.password_correct else None
     st.title("🔐 Alumil Secure Login")
     pwd = st.text_input("Προσωπικός Κωδικός", type="password")
     if st.button("Είσοδος", use_container_width=True):
@@ -176,8 +233,6 @@ if app_mode == "🚛 Driver Terminal":
     if st.session_state.user_plate is None:
         st.title("Επιλογή Δρομολογίου")
         
-        # --- BULLETPROOF ΑΛΛΗΛΕΞΑΡΤΩΜΕΝΑ DROPDOWNS ΜΕ ΣΤΑΣΕΙΣ (NEW) ---
-        # 1. Υπολογισμός Διαθέσιμων Ημερομηνιών
         if st.session_state.filter_plate != "Όλα":
             dates_raw = fleet_info[fleet_info['Truck License Plate'] == st.session_state.filter_plate]['Loading_Date'].dropna().astype(str).unique()
         else:
@@ -185,18 +240,16 @@ if app_mode == "🚛 Driver Terminal":
         avail_dates = ["Όλες"] + sorted(dates_raw.tolist())
         if st.session_state.filter_date not in avail_dates: st.session_state.filter_date = "Όλες"
 
-        # 2. Υπολογισμός Διαθέσιμων Φορτηγών ΚΑΙ Πλήθους Στάσεων
         if st.session_state.filter_date != "Όλες":
             plates_raw = fleet_info[fleet_info['Loading_Date'] == st.session_state.filter_date]['Truck License Plate'].dropna().astype(str).unique()
         else:
             plates_raw = fleet_info['Truck License Plate'].dropna().astype(str).unique()
         
         plate_options = ["Όλα"]
-        plate_mapping = {"Όλα": "Όλα"} # Display String -> Real Plate
-        clean_to_display = {"Όλα": "Όλα"} # Real Plate -> Display String
+        plate_mapping = {"Όλα": "Όλα"} 
+        clean_to_display = {"Όλα": "Όλα"} 
 
         for p in sorted(plates_raw.tolist()):
-            # Υπολογισμός στάσεων βάσει του φίλτρου ημερομηνίας
             if st.session_state.filter_date != "Όλες":
                 dests = fleet_info[(fleet_info['Truck License Plate'] == p) & (fleet_info['Loading_Date'] == st.session_state.filter_date)]['Dests'].sum()
             else:
@@ -210,7 +263,6 @@ if app_mode == "🚛 Driver Terminal":
         if st.session_state.filter_plate not in clean_to_display: st.session_state.filter_plate = "Όλα"
 
         col1, col2 = st.columns(2)
-        # Εμφανίζουμε τα displays (με τις στάσεις) αλλά αποθηκεύουμε το raw (χωρίς στάσεις)
         sel_disp = col1.selectbox("🚚 Επιλέξτε Φορτηγό", plate_options, index=plate_options.index(clean_to_display[st.session_state.filter_plate]))
         plate_sel = plate_mapping[sel_disp]
         date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", avail_dates, index=avail_dates.index(st.session_state.filter_date))
@@ -241,7 +293,6 @@ if app_mode == "🚛 Driver Terminal":
         gps = get_geolocation()
         curr_loc = (gps['coords']['latitude'], gps['coords']['longitude']) if gps and 'coords' in gps else (41.0, 22.8)
 
-        # --- GEOCODING & AUTO-SAVE LOGIC ---
         new_coords_batch = []
         for idx, row in user_data.iterrows():
             street = str(row.get('Street', ''))
@@ -273,7 +324,6 @@ if app_mode == "🚛 Driver Terminal":
                 load_full_data.clear() 
                 st.toast(f"✅ Αποθηκεύτηκαν μόνιμα {len(new_coords_batch)} νέες διευθύνσεις!")
 
-        # --- UI TABS ---
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["🌎 Γενικός Χάρτης", "🛣️ Δρομολόγηση", "📦 POD Protocol", "📊 Analytics", "📩 Ειδοποίηση"])
 
         with tab1:
@@ -361,7 +411,6 @@ if app_mode == "🚛 Driver Terminal":
                     addr_display = s.get('address', 'Άγνωστη Διεύθυνση')
                     lat, lon = s['coords'][0], s['coords'][1]
                     
-                    # --- GOOGLE MAPS & WAZE INTEGRATION ---
                     gmaps_url = f"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}"
                     waze_url = f"https://waze.com/ul?ll={lat},{lon}&navigate=yes"
                     nav_html = f"&nbsp;&nbsp;<a href='{gmaps_url}' target='_blank' style='text-decoration:none;font-size:16px;'>🗺️ G-Maps</a> &nbsp;|&nbsp; <a href='{waze_url}' target='_blank' style='text-decoration:none;font-size:16px;'>🧭 Waze</a>"
@@ -447,10 +496,8 @@ if app_mode == "🚛 Driver Terminal":
                         curr_unload = next(s.get('unload', 0) for s in st.session_state.route_data if s['name'] == active_cust)
                         total_wait = int(curr_unload + nxt_cust.get('drive_to', 0))
                         
-                        # --- LIVE TRACKING LINK (UBER STYLE) ---
-                        # Δημιουργία ενός Tracking Link με βάση την Πινακίδα (URL Parameter)
-                        # Προσωρινά δείχνει στο ίδιο το app, αλλά ρυθμισμένο για μελλοντική χρήση του /?track=plate
-                        base_url = "https://alumil-hub.streamlit.app/" # Αντικατέστησε το με το δικό σου URL του Streamlit
+                        # ΣΗΜΑΝΤΙΚΟ: Βάλε εδώ το ακριβές URL της εφαρμογής σου
+                        base_url = "https://your-app-name.streamlit.app/" # <-- EDIT THIS!
                         tracking_url = f"{base_url}?track={st.session_state.user_plate}"
                         
                         subject = f"Αναμενόμενη Παράδοση Alumil - {nxt_name}"
