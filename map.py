@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIG & TIMEZONE ---
-st.set_page_config(page_title="Alumil Logistics Hub v30", layout="wide")
+st.set_page_config(page_title="Alumil Logistics Hub v31", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
 GR_TIME = timezone(timedelta(hours=3))
 
@@ -180,19 +180,19 @@ if app_mode == "🚛 Driver Terminal":
     if st.session_state.user_plate is None:
         st.title("Επιλογή Δρομολογίου")
         
-        # --- ΑΛΛΗΛΕΞΑΡΤΩΜΕΝΑ DROPDOWNS (ΔΙΑΔΡΑΣΤΙΚΑ ΦΙΛΤΡΑ) ---
-        # 1. Υπολογισμός διαθέσιμων επιλογών
+        # --- BULLETPROOF ΑΛΛΗΛΕΞΑΡΤΩΜΕΝΑ DROPDOWNS ---
         if st.session_state.filter_date != "Όλες":
-            avail_plates = ["Όλα"] + sorted(fleet_info[fleet_info['Loading_Date'] == st.session_state.filter_date]['Truck License Plate'].unique().tolist())
+            plates_raw = fleet_info[fleet_info['Loading_Date'] == st.session_state.filter_date]['Truck License Plate'].dropna().astype(str).unique()
         else:
-            avail_plates = ["Όλα"] + sorted(fleet_info['Truck License Plate'].unique().tolist())
+            plates_raw = fleet_info['Truck License Plate'].dropna().astype(str).unique()
+        avail_plates = ["Όλα"] + sorted(plates_raw.tolist())
 
         if st.session_state.filter_plate != "Όλα":
-            avail_dates = ["Όλες"] + sorted(fleet_info[fleet_info['Truck License Plate'] == st.session_state.filter_plate]['Loading_Date'].unique().tolist())
+            dates_raw = fleet_info[fleet_info['Truck License Plate'] == st.session_state.filter_plate]['Loading_Date'].dropna().astype(str).unique()
         else:
-            avail_dates = ["Όλες"] + sorted(fleet_info['Loading_Date'].unique().tolist())
+            dates_raw = fleet_info['Loading_Date'].dropna().astype(str).unique()
+        avail_dates = ["Όλες"] + sorted(dates_raw.tolist())
 
-        # Προστασία αν μια προηγούμενη επιλογή δεν υπάρχει πλέον
         if st.session_state.filter_plate not in avail_plates: st.session_state.filter_plate = "Όλα"
         if st.session_state.filter_date not in avail_dates: st.session_state.filter_date = "Όλες"
 
@@ -200,7 +200,6 @@ if app_mode == "🚛 Driver Terminal":
         plate_sel = col1.selectbox("🚚 Επιλέξτε Φορτηγό", avail_plates, index=avail_plates.index(st.session_state.filter_plate))
         date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", avail_dates, index=avail_dates.index(st.session_state.filter_date))
 
-        # 2. Ενημέρωση μνήμης και αυτόματο Rerun αν αλλάξει κάτι
         if plate_sel != st.session_state.filter_plate or date_sel != st.session_state.filter_date:
             st.session_state.filter_plate = plate_sel
             st.session_state.filter_date = date_sel
@@ -208,7 +207,6 @@ if app_mode == "🚛 Driver Terminal":
 
         st.divider()
 
-        # 3. Εμφάνιση Κουμπιού Έναρξης ΜΟΝΟ αν έχουν επιλεγεί και τα δύο
         if plate_sel != "Όλα" and date_sel != "Όλες":
             selected_route = fleet_info[(fleet_info['Truck License Plate'] == plate_sel) & (fleet_info['Loading_Date'] == date_sel)].iloc[0]
             st.success(f"✅ Επιτυχής Επιλογή: Προγραμματισμένες Στάσεις Δρομολογίου: **{int(selected_route['Dests'])}**")
