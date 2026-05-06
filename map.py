@@ -40,8 +40,11 @@ if "track" in st.query_params:
         transit.columns = transit.columns.str.strip()
         
         if 'Plate' in transit.columns:
+            # Καθαρίζουμε την πινακίδα από το Sheet (αφαίρεση κενών παντού)
             transit['Plate_Clean'] = transit['Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
-            vehicle_log = transit[transit['Plate_Clean'] == tracked_plate]
+    
+    # Φιλτράρουμε τις εγγραφές
+    vehicle_log = transit[transit['Plate_Clean'] == tracked_plate.replace(' ', '').upper()]
             
             if not vehicle_log.empty:
                 # Ανάκτηση των τελευταίων στιγμάτων
