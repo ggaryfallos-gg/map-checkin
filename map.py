@@ -371,7 +371,7 @@ if app_mode == "🚛 Driver Terminal":
          
           folium.Marker(
             [r['Final_Lat'], r['Final_Lon']],
-            popup=folium.Popup(popup_content, max_width=300),
+            popup=popup_content # folium.Popup(popup_content, max_width=300),
             tooltip=f"{r['Name']}"
           ).add_to(m1)
       st_folium(m1, width="100%", height=500, key="all_points_map")
