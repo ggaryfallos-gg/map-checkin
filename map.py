@@ -44,8 +44,8 @@ if "track" in st.query_params:
       vehicle_log = transit[transit['Plate_Clean'] == tracked_plate]
      
       if not vehicle_log.empty:
-        # Ανάκτηση των 5 πιο πρόσφατων στιγμάτων
-        recent_logs = vehicle_log.tail(5)
+        # Ανάκτηση των  πιο πρόσφατων στιγμάτων
+        recent_logs = vehicle_log.tail(10)
        
         path_coords = []
         for _, row in recent_logs.iterrows():
@@ -60,7 +60,7 @@ if "track" in st.query_params:
        
         st.info(f"Τελευταία ενημέρωση τηλεματικής: **{last_update}**")
        
-        m_public = folium.Map(location=[curr_lat, curr_lon], zoom_start=15)
+        m_public = folium.Map(location=[curr_lat, curr_lon], zoom_start=1)
        
         # Σχεδιασμός Πορείας (αν υπάρχουν πάνω από 1 στίγματα)
         if len(path_coords) > 1:
@@ -94,7 +94,7 @@ if "track" in st.query_params:
           icon=folium.Icon(color='green', icon='truck', prefix='fa')
         ).add_to(m_public)
        
-        st_folium(m_public, width="100%", height=500, key="public_tracking_map")
+        st_folium(m_public, width="100%", height=00, key="public_tracking_map")
       else:
         st.warning("Το όχημα δεν εκπέμπει στίγμα αυτή τη στιγμή ή δεν έχει ξεκινήσει το δρομολόγιο.")
     else:
