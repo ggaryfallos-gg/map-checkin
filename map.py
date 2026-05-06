@@ -78,10 +78,11 @@ if "track" in st.query_params:
     else:
         # Fallback σε ευθεία γραμμή αν το API αποτύχει
         folium.PolyLine(path_coords, color="#007bff", weight=3, dash_array='5, 5').add_to(m_public)
+      
          
           # Μικρές τελείες στα προηγούμενα στίγματα
       for coord in path_coords[:-1]:
-            folium.CircleMarker(
+        folium.CircleMarker(
               location=coord,
               radius=4,
               color="#007bff",
