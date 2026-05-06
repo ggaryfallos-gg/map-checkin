@@ -64,7 +64,6 @@ if "track" in st.query_params:
        
        # Αντί για το απλό PolyLine, κάνουμε κλήση στο OSRM
 if len(path_coords) > 1:
-    # Καλούμε το OSRM για να πάρουμε τη γεωμετρία των δρόμων
     geom, _, _ = get_osrm_data(path_coords)
     
     if geom:
