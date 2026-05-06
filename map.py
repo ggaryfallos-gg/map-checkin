@@ -28,7 +28,7 @@ DELIVERIES_URL = "https://docs.google.com/spreadsheets/d/10uKgg3AIuSnROK2-6VnY0R
 # ==========================================
 if "track" in st.query_params:
   tracked_plate = st.query_params["track"].upper().replace(' ', '')   
-    
+   
     st.title("📍 Alumil Live Delivery Tracking")
     st.write(f"Παρακολούθηση πορείας οχήματος: **{tracked_plate}**")
     
