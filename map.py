@@ -526,7 +526,7 @@ if app_mode == "🚛 Driver Terminal":
                         total_wait = int(curr_unload + nxt_cust.get('drive_to', 0))
                         
                         # ΣΗΜΑΝΤΙΚΟ: Βάλε εδώ το URL σου
-                        base_url = "https://your-app-name.streamlit.app/" # <-- Αντικατέστησέ το
+                        base_url = "https://map-checkin-wmw4nmixyyu8mgfrnhmusm.streamlit.app/" # <-- Αντικατέστησέ το
                         tracking_url = f"{base_url}?track={st.session_state.user_plate}"
                         
                         subject = f"Αναμενόμενη Παράδοση Alumil - {nxt_name}"
