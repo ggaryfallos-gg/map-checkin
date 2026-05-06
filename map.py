@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIG & TIMEZONE ---
-st.set_page_config(page_title="Alumil Logistics Hub v17", layout="wide")
+st.set_page_config(page_title="Alumil Logistics Hub v19", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
 GR_TIME = timezone(timedelta(hours=3))
 
@@ -26,6 +26,7 @@ if "username" not in st.session_state: st.session_state.username = None
 if "route_data" not in st.session_state: st.session_state.route_data = []
 if "route_geom" not in st.session_state: st.session_state.route_geom = None
 if "start_time" not in st.session_state: st.session_state.start_time = None
+if "draft_sequence" not in st.session_state: st.session_state.draft_sequence = None
 
 # --- LOGIN SCREEN ---
 def check_password():
@@ -53,139 +54,169 @@ def get_osrm_data(coords):
     return None, 0, 0
 
 def clean_val(v):
+    # Μετατρέπει το ελληνικό 1.500,50 σε αγγλικό 1500.50 για υπολογισμούς
     try: return float(str(v).replace('.', '').replace(',', '.'))
     except: return 0.0
 
+def gr_num(val, decimals=1):
+    # Επιστρέφει νούμερο με τελεία στις χιλιάδες και κόμμα στα δεκαδικά για εμφάνιση (UI)
+    s = f"{val:,.{decimals}f}"
+    return s.replace(',', 'X').replace('.', ',').replace('X', '.')
+
 @st.cache_data(ttl=300)
 def load_full_data():
-    # 1. Load Shipments
     ship = conn.read(spreadsheet=SHIPMENTS_URL, ttl=300)
     ship['Plate_Clean'] = ship['Truck License Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
     ship['City_Clean'] = ship['City'].astype(str).str.strip().str.upper()
-    
     for c in ['Total KG', 'Unpainted', 'White', 'Colored', 'Accessories']:
         if c in ship.columns: ship[c] = ship[c].apply(clean_val)
     
-    # 2. Load Coords
     coords = conn.read(spreadsheet=COORDS_URL, ttl=300)
     coords['City_Match'] = coords['City'].astype(str).str.strip().str.upper()
-    
-    # 3. Merge
     df = pd.merge(ship, coords.drop_duplicates('City_Match'), left_on='City_Clean', right_on='City_Match', how='left')
     
-    # 4. Calculate Destinations per Truck
     counts = df.groupby('Plate_Clean')['Name'].nunique().reset_index(name='Dests')
     unique_plates = df[['Truck License Plate', 'Plate_Clean']].drop_duplicates()
     fleet_summary = pd.merge(unique_plates, counts, on='Plate_Clean', how='left').fillna(0)
-    fleet_summary['Label'] = fleet_summary.apply(lambda r: f"{r['Truck License Plate']} ({int(r['Dests'])} Προορισμοί)", axis=1)
-    
+    fleet_summary['Label'] = fleet_summary.apply(lambda r: f"{r['Truck License Plate']} ({int(r['Dests'])} Στάσεις)", axis=1)
     return fleet_summary.sort_values('Dests', ascending=False), df
 
 fleet_info, all_data = load_full_data()
 
 # --- SIDEBAR ---
-st.sidebar.title("Alumil Menu")
+st.sidebar.title("Alumil Hub")
 st.sidebar.write(f"👤 **{st.session_state.username}**")
-app_mode = st.sidebar.radio("Λειτουργία", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
+app_mode = st.sidebar.radio("Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
 
 if st.sidebar.button("Logout"):
     st.session_state.password_correct = False
     st.session_state.user_plate = None
+    st.session_state.draft_sequence = None
     st.rerun()
 
 # --- 1. DRIVER TERMINAL ---
 if app_mode == "🚛 Driver Terminal":
     if st.session_state.user_plate is None:
         st.title("Επιλογή Οχήματος")
-        sel = st.selectbox("Επιλέξτε το φορτηγό σας", fleet_info['Label'])
-        if st.button("Έναρξη Βάρδιας", type="primary", use_container_width=True):
+        sel = st.selectbox("Φορτηγό", fleet_info['Label'])
+        if st.button("Έναρξη", type="primary", use_container_width=True):
             row = fleet_info[fleet_info['Label'] == sel].iloc[0]
             st.session_state.user_plate = row['Plate_Clean']
             st.session_state.display_plate = row['Truck License Plate']
+            st.session_state.draft_sequence = None
             st.rerun()
     else:
-        st.subheader(f"🚚 Όχημα: {st.session_state.display_plate}")
+        st.subheader(f"🚚 {st.session_state.display_plate}")
         user_data = all_data[all_data['Plate_Clean'] == st.session_state.user_plate]
         gps = get_geolocation()
         curr_loc = (gps['coords']['latitude'], gps['coords']['longitude']) if gps and 'coords' in gps else (41.0, 22.8)
 
-        tab1, tab2, tab3, tab4 = st.tabs(["🗺️ Δρομολόγηση", "📦 POD Protocol", "📊 Analytics", "📩 Ειδοποίηση"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🌎 Γενικός Χάρτης", "🛣️ Δρομολόγηση", "📦 POD Protocol", "📊 Analytics", "📩 Ειδοποίηση"])
 
         with tab1:
-            if st.button("🚀 Υπολογισμός Διαδρομής & Χρόνων", use_container_width=True):
+            st.write("Όλα τα σημεία εκφόρτωσης του δρομολογίου:")
+            m1 = folium.Map(location=curr_loc, zoom_start=7)
+            folium.Marker(curr_loc, popup="Η θέση μου", icon=folium.Icon(color='red', icon='info-sign')).add_to(m1)
+            for _, r in user_data.drop_duplicates(subset=['Name']).iterrows():
+                if pd.notna(r['Latitude']):
+                    folium.Marker([r['Latitude'], r['Longitude']], popup=f"{r['Name']} ({r['City_x']})").add_to(m1)
+            st_folium(m1, width="100%", height=500, key="all_points_map")
+
+        with tab2:
+            st.subheader("Σχεδιασμός & Βελτιστοποίηση Διαδρομής")
+            
+            if st.button("1. Δημιουργία Αυτόματης Πρότασης", use_container_width=True):
                 stops = user_data.drop_duplicates('Name').dropna(subset=['Latitude'])
-                pts, sequence = [curr_loc], []
+                pts, seq_list = [curr_loc], []
                 unvisited = stops.copy()
+                
+                # Nearest Neighbor Logic (Αυτόματη Πρόταση)
                 while not unvisited.empty:
                     unvisited['d'] = unvisited.apply(lambda r: geodesic(pts[-1], (r['Latitude'], r['Longitude'])).km, axis=1)
                     idx = unvisited['d'].idxmin()
                     row = unvisited.loc[idx]
                     pts.append((row['Latitude'], row['Longitude']))
-                    un_time = (row['Total KG'] / 1000) * 10
-                    sequence.append({'name': row['Name'], 'city': row['City_x'], 'kg': row['Total KG'], 'unload': un_time, 'coords': (row['Latitude'], row['Longitude'])})
+                    seq_list.append({'Name': row['Name'], 'City': row['City_x'], 'KG': row['Total KG'], 'Latitude': row['Latitude'], 'Longitude': row['Longitude']})
                     unvisited = unvisited.drop(index=idx)
                 
-                for i in range(len(sequence)):
-                    _, _, d_min = get_osrm_data([pts[i], pts[i+1]])
-                    sequence[i]['drive_to'] = d_min
+                draft_df = pd.DataFrame(seq_list)
+                draft_df.insert(0, 'Σειρά', range(1, len(draft_df) + 1))
+                st.session_state.draft_sequence = draft_df
+
+            if st.session_state.draft_sequence is not None:
+                st.info("Ελέγξτε την παρακάτω προτεινόμενη σειρά. Μπορείτε να κάνετε **διπλό κλικ στη στήλη 'Σειρά'** για να αλλάξετε τη σειρά εκφόρτωσης (Ad-Hoc Rerouting).")
+                edited_seq = st.data_editor(st.session_state.draft_sequence, hide_index=True, use_container_width=True, disabled=['Name', 'City', 'KG', 'Latitude', 'Longitude'])
                 
-                st.session_state.route_data = sequence
-                geom, _, _ = get_osrm_data(pts)
-                st.session_state.route_geom = geom
-                st.rerun()
+                if st.button("2. Οριστικοποίηση & Υπολογισμός (OSRM)", type="primary", use_container_width=True):
+                    # Ad-hoc Ταξινόμηση βάσει της χειροκίνητης σειράς
+                    edited_seq = edited_seq.sort_values(by='Σειρά')
+                    
+                    pts, final_seq = [curr_loc], []
+                    for _, row in edited_seq.iterrows():
+                        pts.append((row['Latitude'], row['Longitude']))
+                        un_time = (row['KG'] / 1000) * 10
+                        final_seq.append({'name': row['Name'], 'city': row['City'], 'kg': row['KG'], 'unload': un_time, 'coords': (row['Latitude'], row['Longitude'])})
+                    
+                    for i in range(len(final_seq)):
+                        _, _, d_min = get_osrm_data([pts[i], pts[i+1]])
+                        final_seq[i]['drive_to'] = d_min
+                    
+                    st.session_state.route_data = final_seq
+                    geom, _, _ = get_osrm_data(pts)
+                    st.session_state.route_geom = geom
+                    st.rerun()
 
             if st.session_state.route_data:
+                st.divider()
+                st.write("**Τελικό Δρομολόγιο & Εκτιμώμενοι Χρόνοι:**")
                 for i, s in enumerate(st.session_state.route_data):
-                    st.write(f"**{i+1}. {s['name']}** ({s['city']}): 🚛 ~{int(s['drive_to'])}' | 🏗️ ~{int(s['unload'])}'")
-                m = folium.Map(location=curr_loc, zoom_start=7)
+                    st.write(f"**{i+1}. {s['name']}** ({s['city']}): 🚛 ~{int(s['drive_to'])}' | 🏗️ ~{int(s['unload'])}' (Φορτίο: {gr_num(s['kg'], 0)} KG)")
+                
+                m2 = folium.Map(location=curr_loc, zoom_start=7)
                 if st.session_state.route_geom:
-                    folium.PolyLine([[l, lon] for lon, l in st.session_state.route_geom], color="blue").add_to(m)
-                st_folium(m, width="100%", height=400, key="driver_map")
+                    folium.PolyLine([[l, lon] for lon, l in st.session_state.route_geom], color="blue").add_to(m2)
+                st_folium(m2, width="100%", height=450, key="routing_map")
 
-        with tab2:
+        with tab3:
             st.subheader("POD Protocol")
             custList = [s['name'] for s in st.session_state.route_data] if st.session_state.route_data else sorted(user_data['Name'].unique())
-            active_cust = st.selectbox("Πελάτης προς Εκφόρτωση", custList)
+            active_cust = st.selectbox("Πελάτης", custList)
             cust_rows = user_data[user_data['Name'] == active_cust]
-            
-            use_cam = st.checkbox("Άνοιγμα Κάμερας")
-            photo = st.camera_input("📸 Παραστατικό") if use_cam else None
+            use_cam = st.checkbox("Ενεργοποίηση Κάμερας")
+            photo = st.camera_input("📸 Φωτογραφία") if use_cam else None
             
             c1, c2 = st.columns(2)
             if c1.button("▶️ Άφιξη", use_container_width=True):
                 st.session_state.start_time = datetime.now(GR_TIME)
-                st.info(f"Check-in: {st.session_state.start_time.strftime('%H:%M:%S')}")
-            
             if c2.button("⏹️ Sync POD", type="primary", use_container_width=True):
                 if st.session_state.start_time:
                     dur = (datetime.now(GR_TIME) - st.session_state.start_time).total_seconds() / 60
                     p_kg = cust_rows[['Unpainted', 'White', 'Colored']].sum().sum()
                     a_kg = cust_rows['Accessories'].sum()
-                    
                     new_log = pd.DataFrame([{
                         "Timestamp": datetime.now(GR_TIME).strftime('%Y-%m-%d %H:%M:%S'), 
                         "Driver": st.session_state.username, "Plate": st.session_state.display_plate, 
                         "Customer": active_cust, "Profiles_KG": p_kg, "Accessories_KG": a_kg,
-                        "Transit_Mins": 0, "Unload_Mins": round(dur, 1), 
-                        "Checkin_Lat": curr_loc[0], "Checkin_Lon": curr_loc[1], "Photo": "Yes" if photo else "No"
+                        "Unload_Mins": round(dur, 1), "Photo": "Yes" if photo else "No"
                     }])
                     conn.update(spreadsheet=LOG_URL, data=pd.concat([conn.read(spreadsheet=LOG_URL, ttl=0), new_log], ignore_index=True))
                     st.success("Συγχρονίστηκε!")
                     st.session_state.start_time = None
-                else: st.error("Πατήστε 'Άφιξη' πρώτα!")
+                else: st.error("Πατήστε 'Άφιξη'!")
 
-        with tab3:
+        with tab4:
             tot = user_data['Total KG'].sum()
             prof = user_data[['Unpainted', 'White', 'Colored']].sum().sum()
             acc = user_data['Accessories'].sum()
             c1, c2, c3 = st.columns(3)
-            c1.metric("Σύνολο", f"{tot:,.0f} KG")
-            c2.metric("Προφίλ", f"{prof:,.0f} KG")
-            c3.metric("Εξαρτήματα", f"{acc:,.0f} KG")
+            # Χρήση gr_num για Ελληνικό Formatting (1.500,00 KG)
+            c1.metric("Σύνολο", f"{gr_num(tot, 1)} KG")
+            c2.metric("Προφίλ", f"{gr_num(prof, 1)} KG")
+            c3.metric("Εξαρτήματα", f"{gr_num(acc, 1)} KG")
             st.progress(min(tot/24000, 1.0))
-            st.caption(f"Load Factor: {(tot/24000)*100:.1f}%")
+            st.caption(f"Load Factor: {gr_num((tot/24000)*100, 1)}%")
 
-        with tab4:
+        with tab5:
             st.subheader("📩 Ειδοποίηση Επόμενου")
             if st.session_state.route_data:
                 names = [s['name'] for s in st.session_state.route_data]
@@ -193,15 +224,14 @@ if app_mode == "🚛 Driver Terminal":
                     idx = names.index(active_cust)
                     if idx < len(st.session_state.route_data) - 1:
                         nxt = st.session_state.route_data[idx+1]
-                        curr_unload = next(s['unload'] for s in st.session_state.route_data if s['name'] == active_cust)
-                        total_wait = int(curr_unload + nxt['drive_to'])
-                        body = f"Ενημέρωση από Alumil: Εκφόρτωση σε εξέλιξη. Άφιξη σε εσάς σε περίπου {total_wait} λεπτά."
+                        total_wait = int(next(s['unload'] for s in st.session_state.route_data if s['name'] == active_cust) + nxt['drive_to'])
+                        body = f"Alumil Logistics: Εκφόρτωση σε εξέλιξη. Εκτιμώμενη άφιξη σε εσάς σε περίπου {total_wait} λεπτά."
                         st.info(body)
                         link = f"mailto:?subject=Alumil Delivery&body={urllib.parse.quote(body)}"
-                        st.markdown(f'<a href="{link}" target="_blank" style="padding:15px; background-color:#007bff; color:white; border-radius:8px; text-decoration:none;">📧 Email στον επόμενο</a>', unsafe_allow_html=True)
+                        st.markdown(f'<a href="{link}" target="_blank" style="padding:15px; background-color:#007bff; color:white; border-radius:8px; text-decoration:none;">📧 Mail to Next Customer</a>', unsafe_allow_html=True)
 
 # --- 2. ADMIN DASHBOARD ---
 elif app_mode == "📊 Admin Dashboard":
-    st.title("Admin Panel")
+    st.title("Admin Control Panel")
     logs = conn.read(spreadsheet=LOG_URL, ttl=0)
     st.dataframe(logs.tail(20), use_container_width=True)
