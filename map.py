@@ -27,13 +27,13 @@ DELIVERIES_URL = "https://docs.google.com/spreadsheets/d/10uKgg3AIuSnROK2-6VnY0R
 # 🛑 PUBLIC VIEW: LIVE TRACKING (ΓΙΑ ΤΟΝ ΠΕΛΑΤΗ)
 # ==========================================
 if "track" in st.query_params:
-    tracked_plate = st.query_params["track"].upper().replace(' ', '')
+  tracked_plate = st.query_params["track"].upper().replace(' ', '')   
     
     st.title("📍 Alumil Live Delivery Tracking")
     st.write(f"Παρακολούθηση πορείας οχήματος: **{tracked_plate}**")
     
     if st.button("🔄 Ανανέωση Θέσης", type="primary"):
-        st.cache_data.clear()
+      st.cache_data.clear()
         
     try:
         transit = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
