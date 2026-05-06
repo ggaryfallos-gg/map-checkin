@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIG & TIMEZONE ---
-st.set_page_config(page_title="Alumil Logistics Hub v33", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Alumil Logistics Hub v34", layout="wide", initial_sidebar_state="collapsed")
 conn = st.connection("gsheets", type=GSheetsConnection)
 GR_TIME = timezone(timedelta(hours=3))
 
@@ -32,36 +32,66 @@ if "track" in st.query_params:
     st.title("📍 Alumil Live Delivery Tracking")
     st.write(f"Παρακολούθηση πορείας οχήματος: **{tracked_plate}**")
     
-    # Κουμπί χειροκίνητης ανανέωσης
     if st.button("🔄 Ανανέωση Θέσης", type="primary"):
         st.cache_data.clear()
         
     try:
-        # Διαβάζει το Sheet όπου στέλνει στίγμα το MacroDroid
         transit = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
         transit.columns = transit.columns.str.strip()
         
-        # Υποθέτουμε ότι υπάρχουν στήλες Plate, Latitude, Longitude, Timestamp
         if 'Plate' in transit.columns:
             transit['Plate_Clean'] = transit['Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
             vehicle_log = transit[transit['Plate_Clean'] == tracked_plate]
             
             if not vehicle_log.empty:
-                latest = vehicle_log.iloc[-1]
-                # Ανάκτηση συντεταγμένων (υποστηρίζει Lat/Latitude)
-                lat = float(latest.get('Latitude', latest.get('Lat', 40.6401)))
-                lon = float(latest.get('Longitude', latest.get('Lon', 22.9444)))
+                # Ανάκτηση των 5 πιο πρόσφατων στιγμάτων
+                recent_logs = vehicle_log.tail(5)
+                
+                path_coords = []
+                for _, row in recent_logs.iterrows():
+                    lat = float(row.get('Latitude', row.get('Lat', 40.6401)))
+                    lon = float(row.get('Longitude', row.get('Lon', 22.9444)))
+                    path_coords.append([lat, lon])
+                
+                # Το τελευταίο στίγμα είναι η τρέχουσα θέση
+                latest = recent_logs.iloc[-1]
+                curr_lat, curr_lon = path_coords[-1][0], path_coords[-1][1]
                 last_update = latest.get('Timestamp', 'Άγνωστη ώρα')
                 
                 st.info(f"Τελευταία ενημέρωση τηλεματικής: **{last_update}**")
                 
-                # Σχεδιασμός Χάρτη Πελάτη
-                m_public = folium.Map(location=[lat, lon], zoom_start=14)
+                m_public = folium.Map(location=[curr_lat, curr_lon], zoom_start=15)
+                
+                # Σχεδιασμός Πορείας (αν υπάρχουν πάνω από 1 στίγματα)
+                if len(path_coords) > 1:
+                    # Γραμμή πορείας
+                    folium.PolyLine(
+                        path_coords,
+                        color="#007bff",
+                        weight=4,
+                        opacity=0.7,
+                        dash_array='10, 10', # Διακεκομμένη γραμμή
+                        tooltip="Πρόσφατη Πορεία"
+                    ).add_to(m_public)
+                    
+                    # Μικρές τελείες στα προηγούμενα στίγματα
+                    for coord in path_coords[:-1]:
+                        folium.CircleMarker(
+                            location=coord,
+                            radius=4,
+                            color="#007bff",
+                            fill=True,
+                            fill_color="#007bff",
+                            fill_opacity=0.6,
+                            tooltip="Προηγούμενο στίγμα"
+                        ).add_to(m_public)
+                
+                # Εικονίδιο φορτηγού στην ΤΡΕΧΟΥΣΑ θέση
                 folium.Marker(
-                    [lat, lon], 
+                    [curr_lat, curr_lon], 
                     popup=f"Alumil Delivery<br>{tracked_plate}", 
                     tooltip="Η παραγγελία σας βρίσκεται εδώ",
-                    icon=folium.Icon(color='blue', icon='truck', prefix='fa')
+                    icon=folium.Icon(color='green', icon='truck', prefix='fa')
                 ).add_to(m_public)
                 
                 st_folium(m_public, width="100%", height=500, key="public_tracking_map")
@@ -92,7 +122,6 @@ if "filter_date" not in st.session_state: st.session_state.filter_date = "Όλε
 # --- LOGIN SCREEN ---
 def check_password():
     if st.session_state.password_correct: return True
-    # Επαναφορά του Sidebar view για τους users της εταιρείας
     st.set_page_config(initial_sidebar_state="expanded") if not st.session_state.password_correct else None
     st.title("🔐 Alumil Secure Login")
     pwd = st.text_input("Προσωπικός Κωδικός", type="password")
@@ -496,8 +525,8 @@ if app_mode == "🚛 Driver Terminal":
                         curr_unload = next(s.get('unload', 0) for s in st.session_state.route_data if s['name'] == active_cust)
                         total_wait = int(curr_unload + nxt_cust.get('drive_to', 0))
                         
-                        # ΣΗΜΑΝΤΙΚΟ: Βάλε εδώ το ακριβές URL της εφαρμογής σου
-                        base_url = "https://map-checkin-wmw4nmixyyu8mgfrnhmusm.streamlit.app/" # 
+                        # ΣΗΜΑΝΤΙΚΟ: Βάλε εδώ το URL σου
+                        base_url = "https://your-app-name.streamlit.app/" # <-- Αντικατέστησέ το
                         tracking_url = f"{base_url}?track={st.session_state.user_plate}"
                         
                         subject = f"Αναμενόμενη Παράδοση Alumil - {nxt_name}"
