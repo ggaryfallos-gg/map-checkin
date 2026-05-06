@@ -373,7 +373,8 @@ if app_mode == "🚛 Driver Terminal":
             [r['Final_Lat'], r['Final_Lon']],
             popup=popup_content, 
             # folium.Popup(popup_content, max_width=300),
-            tooltip=f"{r['Name']}"
+            tooltip=f"{r['Name']}",
+            icon=folium.Icon(color='blue', icon='info-sign') # Standard icon για αποφυγή σφαλμάτων rendering
           ).add_to(m1)
       st_folium(m1, width="100%", height=500, key="all_points_map")
 
