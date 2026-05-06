@@ -63,8 +63,8 @@ if "track" in st.query_params:
         m_public = folium.Map(location=[curr_lat, curr_lon], zoom_start=15)
        
        # Αντί για το απλό PolyLine, κάνουμε κλήση στο OSRM
-if len(path_coords) > 1:
-    geom, _, _ = get_osrm_data(path_coords)
+    if len(path_coords) > 1:
+      geom, _, _ = get_osrm_data(path_coords)
     
     if geom:
         # Σχεδιάζουμε τη γραμμή πάνω στο δρόμο (OSRM geometry)
