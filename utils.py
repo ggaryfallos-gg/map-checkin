@@ -37,10 +37,16 @@ def clean_val(v):
     if isinstance(v, (int, float)): return float(v)
     v_str = str(v).strip()
     if not v_str or v_str.lower() in ['nan', 'none', '']: return 0.0
-    if ',' in v_str: v_str = v_str.replace('.', '').replace(',', '.')
-    try: return float(v_str)
+    
+    # Αν το string περιέχει γράμματα (όπως η πινακίδα), σταμάτα αμέσως
+    if any(c.isalpha() for c in v_str if c not in [',', '.']): 
+        return 0.0
+        
+    if ',' in v_str: 
+        v_str = v_str.replace('.', '').replace(',', '.')
+    try: 
+        return float(v_str)
     except ValueError:
-        # Αν δεν είναι αριθμός (π.χ. είναι πινακίδα 'KIE 6761'), επέστρεψε 0.0 ή το string
         return 0.0
 
 def gr_num(val, decimals=1):
