@@ -383,6 +383,7 @@ if app_mode == "🚛 Driver Terminal":
                 st.session_state.user_plate = selected_route['Plate_Clean']
                 st.session_state.loading_date = selected_route['Loading_Date']
                 st.session_state.display_plate = selected_route['Truck License Plate']
+                st.session_state.inspected = False
                 st.rerun()
         else:
             st.info("ℹ️ Παρακαλώ επιλέξτε **Φορτηγό** και **Ημερομηνία**.")
