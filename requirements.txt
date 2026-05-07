@@ -7,3 +7,4 @@ geopy
 st-gsheets-connection
 requests
 matplotlib
+jinja2
