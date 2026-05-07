@@ -11,7 +11,6 @@ def render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, 
 # ==========================================
 # 🚛 1. DRIVER TERMINAL
 # ==========================================
-if app_mode == "🚛 Driver Terminal":
     
     # 1. ΕΛΕΓΧΟΣ: Αν δεν έχει επιλεγεί ακόμα φορτηγό
     if st.session_state.user_plate is None:
