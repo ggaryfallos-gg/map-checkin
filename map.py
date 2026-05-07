@@ -134,6 +134,8 @@ if "track" in st.query_params:
 
 # --- SESSION STATE INIT ---
 if "password_correct" not in st.session_state: st.session_state.password_correct = False
+if "is_logged_in" not in st.session_state: st.session_state.is_logged_in = False
+if "inspected" not in st.session_state: st.session_state.inspected = False
 if "user_plate" not in st.session_state: st.session_state.user_plate = None
 if "loading_date" not in st.session_state: st.session_state.loading_date = None
 if "username" not in st.session_state: st.session_state.username = None
