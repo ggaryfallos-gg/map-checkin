@@ -223,8 +223,6 @@ def reset_shift():
     st.session_state.user_plate = None
     st.session_state.loading_date = None
     st.session_state.draft_sequence = None
-    #st.session_state.is_logged_in = False
-    #st.session_state.inspected = False
     st.session_state.route_data = []
     st.session_state.route_geom = None
     st.session_state.start_time = None
@@ -296,6 +294,7 @@ if app_mode == "🚛 Driver Terminal":
                     st.rerun()
                 else:
                     st.error("Επιλέξτε όλα τα πεδία.")
+    st.stop()
 
     # 3. ΚΥΡΙΩΣ TERMINAL: Εμφανίζεται μόνο αν έχουν περάσει τα παραπάνω
     else:
