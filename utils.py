@@ -3,11 +3,13 @@ import pandas as pd
 import requests
 import urllib.parse
 import time
+from geopy.distance import geodesic
 
 def geocode_address(street, city):
     if not street or str(street).lower() in ['nan', 'none', '']: return None, None
     street_clean = str(street).split(',')[0].strip()
-    queries = [f"{street_clean}, {city}, Greece", f"{street_clean}, Greece"]
+    city_clean = str(city).strip()
+    queries = [f"{street_clean}, {city_clean}, Greece", f"{street_clean}, Greece"]
     for q in queries:
         url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(q)}&format=json&limit=1"
         try:
@@ -38,4 +40,5 @@ def clean_val(v):
     except: return 0.0
 
 def gr_num(val, decimals=1):
-    return f"{val:,.{decimals}f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    s = f"{val:,.{decimals}f}"
+    return s.replace(',', 'X').replace('.', ',').replace('X', '.')
