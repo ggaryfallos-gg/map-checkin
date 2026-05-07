@@ -57,5 +57,5 @@ if st.session_state.password_correct:
     if app_mode == "🚛 Driver Terminal":
         render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
     else:
-        render_admin_dashboard(all_data, _conn, LOG_URL)
+        render_admin_dashboard(all_data, conn, LOG_URL)
 
