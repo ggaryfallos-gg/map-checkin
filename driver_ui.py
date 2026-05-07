@@ -5,7 +5,8 @@ from streamlit_folium import st_folium
 from streamlit_js_eval import get_geolocation # ΑΥΤΟ ΕΛΕΙΠΕ
 from datetime import datetime
 import time
-from utils import gr_num, get_osrm_data, geocode_address,get_supplier_pickups
+from utils import gr_num, get_osrm_data, geocode_address
+from admin_ui import get_supplier_pickups
 
 
 def render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME):
