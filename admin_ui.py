@@ -125,7 +125,7 @@ def render_admin_dashboard(all_data, conn, LOG_URL):
         st.divider()
 
         # 2. Manager/Editor Παραλαβών
-        pickups_df = get_supplier_pickups()
+        pickups_df = get_supplier_pickups(conn, log_url)
         if not pickups_df.empty:
             raw_plates = all_data['Truck License Plate'].dropna().unique().tolist()
             available_plates = sorted([str(p) for p in raw_plates])
