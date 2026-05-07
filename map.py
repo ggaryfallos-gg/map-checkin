@@ -691,7 +691,7 @@ elif app_mode == "📊 Admin Dashboard":
                     # 2. Υπολογισμός δυναμικού ορίου για τα χρώματα
                     # Αν όλες οι τιμές είναι μικρές, το 'high' θα προσαρμοστεί για να βλέπεις χρώματα
                     max_val = pivot_planning.max().max()
-                    if max_val < 1: max_val = 24000 # Safety check
+                    if max_val < 1: max_val = 10000 # Safety check
         
                     # 3. Εφαρμογή Heatmap Styling
                     styled_df = pivot_planning.style.background_gradient(
