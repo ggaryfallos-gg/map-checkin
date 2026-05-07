@@ -50,7 +50,7 @@ if not check_password(): st.stop()
 
 if st.session_state.password_correct:
     # Φόρτωση Δεδομένων
-    fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL,LOG_URL, CUSADDRESS_URL, COORDS_URL)
+    fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL)
     
     app_mode = st.sidebar.radio("Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
     
