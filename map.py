@@ -302,7 +302,7 @@ if app_mode == "🚛 Driver Terminal":
         
     
     if st.session_state.user_plate is None:
-        st.title("Επιλογή Δρομολογίου")
+        #st.title("Επιλογή Δρομολογίου")
         
         if st.session_state.filter_plate != "Όλα":
             dates_raw = fleet_info[fleet_info['Truck License Plate'] == st.session_state.filter_plate]['Loading_Date'].dropna().astype(str).unique()
