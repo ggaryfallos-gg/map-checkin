@@ -108,6 +108,14 @@ def render_admin_dashboard(all_data, conn, LOG_URL):
                 c3, c4 = st.columns(2)
                 s_area = c3.selectbox("Περιοχή", ["Σίνδος", "Καλοχώρι", "Οινόφυτα", "Ασπρόπυργος", "Θεσσαλονίκη", "Αθήνα"])
                 p_date = c4.date_input("Ημερομηνία", value=datetime.now())
+
+                # 2. Ορισμός του DataFrame (ΕΔΩ ΗΤΑΝ ΤΟ ΣΦΑΛΜΑ)
+                new_pickup_df = pd.DataFrame([new_entry])
+                
+                # 3. Λήψη υπαρχόντων και συνένωση
+                # Περνάμε conn και LOG_URL όπως ορίσαμε στο νέο signature
+                current_pickups = get_supplier_pickups(conn, LOG_URL)
+                updated_data = pd.concat([current_pickups, new_pickup_df], ignore_index=True)
                 
                 if st.form_submit_button("Οριστική Υποβολή"):
                     if s_name and s_addr:
