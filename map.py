@@ -249,65 +249,74 @@ if st.sidebar.button("🚪 Logout"):
 # 🚛 1. DRIVER TERMINAL
 # ==========================================
 if app_mode == "🚛 Driver Terminal":
-    # --- ΝΕΑ ΣΥΝΑΡΤΗΣΗ ΓΙΑ ΣΥΝΤΗΡΗΣΗ ---
-    def save_maintenance_check(driver, plate, checks, issues):
-        try:
-            new_entry = pd.DataFrame([{
-                "Timestamp": datetime.now(GR_TIME).strftime('%Y-%m-%d %H:%M:%S'),
-                "Driver": driver,
-                "Plate": plate,
-                "Tires": checks['tires'],
-                "Oil": checks['oil'],
-                "Documents": checks['docs'],
-                "AdBlue": checks['adblue'],
-                "Issues_Reported": issues
-            }])
-            current_maint = conn.read(spreadsheet=LOG_URL, worksheet="Maintenance_Log", ttl=0)
-            updated_maint = pd.concat([current_maint, new_entry], ignore_index=True)
-            conn.update(spreadsheet=LOG_URL, worksheet="Maintenance_Log", data=updated_maint)
-            return True
-        except:
-            return False
-    
-    # --- ΜΕΣΑ ΣΤΟ ELIF APP_MODE == "🚚 Driver Terminal" ---
-    if st.session_state.is_logged_in:
-        # Ελεγχος αν έγινε το σημερινό inspection (Session State)
-        if 'inspected' not in st.session_state:
-            st.session_state.inspected = False
-    
-        if not st.session_state.inspected:
-            st.header("🛡️ Daily Safety Inspection")
-            st.info(f"Φορτηγό: {st.session_state.display_plate} | Οδηγός: {st.session_state.username}")
-            
-            with st.container(border=True):
-                st.write("Παρακαλώ ελέγξτε τα παρακάτω πριν την εκκίνηση:")
-                c1 = st.checkbox("🛞 Πίεση & Κατάσταση Ελαστικών")
-                c2 = st.checkbox("🛢️ Στάθμη Λαδιού & Ψυκτικού")
-                c3 = st.checkbox("📂 Έγγραφα (Άδεια, Ασφάλεια, Κάρτα Ταχογράφου)")
-                c4 = st.checkbox("💧 Στάθμη AdBlue / Καύσιμα")
-                
-                user_issues = st.text_area("Αναφορά Προβλήματος / Παρατηρήσεις", placeholder="Γράψτε εδώ αν υπάρχει κάποια βλάβη...")
-                
-                if st.button("🚀 Ολοκλήρωση Ελέγχου & Εκκίνηση", type="primary", use_container_width=True):
-                    if c1 and c2 and c3 and c4:
-                        check_dict = {'tires': "OK", 'oil': "OK", 'docs': "OK", 'adblue': "OK"}
-                        success = save_maintenance_check(st.session_state.username, st.session_state.display_plate, check_dict, user_issues)
-                        
-                        if success:
-                            if user_issues:
-                                st.warning("⚠️ Η αναφορά βλάβης καταγράφηκε και θα σταλεί ειδοποίηση.")
-                                # Εδώ μπορεί να μπει κλήση για Email API αν το επιθυμείς
-                            
-                            st.session_state.inspected = True
-                            st.success("Καλό δρόμο!")
-                            time.sleep(1)
-                            st.rerun()
-                    else:
-                        st.error("⚠️ Πρέπει να επιβεβαιώσετε όλους τους ελέγχους ασφαλείας.")
-            st.stop() # Σταματάει την εκτέλεση των υπόλοιπων Tabs μέχρι να γίνει το check
-    
-        # ... ΕΔΩ ΣΥΝΕΧΙΖΕΙ Ο ΚΩΔΙΚΑΣ ΜΕ ΤΑ TABS (tab1, tab2, tab3 κλπ)
+    # Α. Επιλογή Δρομολογίου (Αν δεν έχει επιλεγεί τίποτα)
+    if st.session_state.user_plate is None:
+        st.title("Επιλογή Δρομολογίου")
+        col1, col2 = st.columns(2)
+        
+        raw_p = fleet_info['Truck License Plate'].dropna().unique().tolist()
+        plate_sel = col1.selectbox("🚚 Φορτηγό", sorted([str(p) for p in raw_p]))
+        
+        dates_avail = fleet_info[fleet_info['Truck License Plate']==plate_sel]['Loading_Date'].unique()
+        date_sel = col2.selectbox("📅 Ημ/νία", dates_avail)
+        
+        if st.button("🚀 Έναρξη Βάρδιας", type="primary", use_container_width=True):
+            st.session_state.user_plate = plate_sel.replace(' ', '').upper()
+            st.session_state.display_plate = plate_sel
+            st.session_state.loading_date = date_sel
+            st.session_state.is_logged_in = True # <--- Τώρα ορίζεται το login
+            st.rerun()
 
+    # Β. Daily Safety Inspection (Πριν τα Tabs)
+    elif not st.session_state.inspected:
+        st.header("🛡️ Daily Safety Inspection")
+        st.info(f"Όχημα: **{st.session_state.display_plate}** | Οδηγός: **{st.session_state.username}**")
+        
+        with st.container(border=True):
+            st.write("Επιβεβαιώστε την κατάσταση του οχήματος:")
+            c1 = st.checkbox("🛞 Πίεση & Κατάσταση Ελαστικών")
+            c2 = st.checkbox("🛢️ Στάθμη Λαδιού & Ψυκτικού")
+            c3 = st.checkbox("📂 Έγγραφα (Άδεια, Ασφάλεια, Κάρτα)")
+            c4 = st.checkbox("💧 Στάθμη AdBlue / Καύσιμα")
+            
+            issues = st.text_area("Αναφορά Προβλήματος / Παρατηρήσεις", placeholder="Περιγράψτε τυχόν βλάβες...")
+            
+            if st.button("🏁 Ολοκλήρωση Ελέγχου & Άνοιγμα Terminal", type="primary", use_container_width=True):
+                if c1 and c2 and c3 and c4:
+                    # Αποθήκευση στο Google Sheets
+                    try:
+                        new_check = pd.DataFrame([{
+                            "Timestamp": datetime.now(GR_TIME).strftime('%Y-%m-%d %H:%M:%S'),
+                            "Driver": st.session_state.username,
+                            "Plate": st.session_state.display_plate,
+                            "Tires": "OK", "Oil": "OK", "Docs": "OK", "AdBlue": "OK",
+                            "Issues_Reported": issues
+                        }])
+                        # Διάβασμα υπάρχοντος log και προσθήκη
+                        m_log = conn.read(spreadsheet=LOG_URL, worksheet="Maintenance_Log", ttl=0)
+                        updated_m_log = pd.concat([m_log, new_check], ignore_index=True)
+                        conn.update(spreadsheet=LOG_URL, worksheet="Maintenance_Log", data=updated_m_log)
+                        
+                        st.session_state.inspected = True
+                        st.success("Ο έλεγχος καταγράφηκε! Καλό δρόμο.")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Σφάλμα αποθήκευσης στο Maintenance_Log: {e}")
+                else:
+                    st.error("⚠️ Πρέπει να ελέγξετε όλα τα σημεία για να συνεχίσετε.")
+        st.stop() # Εμποδίζει την εμφάνιση των Tabs
+
+    # Γ. Κυρίως Terminal (Tabs) - Εμφανίζεται ΜΟΝΟ αν st.session_state.inspected == True
+    else:
+        st.subheader(f"🚚 {st.session_state.display_plate} | {st.session_state.loading_date}")
+        
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+            "🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD Protocol", 
+            "📊 Analytics", "📩 Alert", "🏭 Παραλαβές"
+        ])
+        
+        # ... (Εδώ συνεχίζει ο κώδικας των Tabs όπως τον είχαμε)
     
     if st.session_state.user_plate is None:
         st.title("Επιλογή Δρομολογίου")
