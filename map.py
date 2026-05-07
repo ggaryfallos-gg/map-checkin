@@ -490,7 +490,7 @@ if app_mode == "🚛 Driver Terminal":
                     
                     try:
                         # ΔΙΟΡΘΩΣΗ: Γράφουμε στο κεντρικό Log (Sheet1) και ΟΧΙ στο Transit_Log
-                        current_logs = conn.read(spreadsheet=LOG_URL, worksheet="Sheet1", ttl=0)
+                        current_logs = conn.read(spreadsheet=LOG_URL, worksheet="Log", ttl=0)
                         updated_logs = pd.concat([current_logs, new_log], ignore_index=True)
                         conn.update(spreadsheet=LOG_URL, worksheet="Sheet1", data=updated_logs)
                         
