@@ -46,12 +46,15 @@ def gr_num(val, decimals=1):
     return s.replace(',', 'X').replace('.', ',').replace('X', '.')
 
 @st.cache_data(ttl=60)
-def get_supplier_pickups(_conn, log_url):
+def get_supplier_pickups(_conn, log_url, force_refresh=False): # Προσθήκη παραμέτρου
+    if force_refresh:
+        st.cache_data.clear() # Καθαρίζει την cache για να τραβήξει τα φρέσκα
     try:
-        df = conn.read(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", ttl=10)
-        return df
+        df = _conn.read(spreadsheet=log_url, worksheet="Supplier_Pickups", ttl=0)
+        return df if df is not None else pd.DataFrame()
     except:
         return pd.DataFrame()
+        
 @st.cache_data(ttl=600)
 def get_cached_geodesic(p1, p2):
     return geodesic(p1, p2).km
