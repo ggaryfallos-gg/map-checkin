@@ -157,24 +157,46 @@ def render_admin_dashboard(all_data, conn, LOG_URL):
             available_plates = sorted([str(p) for p in raw_plates])
             
             # Εμφάνιση Editor
+        if not pickups_df.empty:
+            # Καθαρισμός στηλών από κενά (σημαντικό για το mapping)
+            pickups_df.columns = pickups_df.columns.str.strip()
+            
             edited_pickups = st.data_editor(
                 pickups_df,
                 column_config={
-                    "Status": st.column_config.SelectboxColumn("Κατάσταση", options=["Pending", "Assigned", "Collected"], required=True),
-                    "Assigned_Plate": st.column_config.SelectboxColumn("Ανάθεση σε Πινακίδα", options=available_plates),
-                    "ID": None, "Lat": None, "Lon": None, "Address": None, "Area": None
+                    # Οι στήλες που κρύβουμε (ID, Lat, Lon κλπ)
+                    "ID": None, 
+                    "Lat": None, 
+                    "Lon": None, 
+                    "Address": None, 
+                    "Area": None,
+                    # Οι στήλες που επεξεργαζόμαστε
+                    "Supplier_Name": st.column_config.TextColumn("Προμηθευτής", disabled=True),
+                    "Date": st.column_config.TextColumn("Ημερομηνία", disabled=True),
+                    "Status": st.column_config.SelectboxColumn(
+                        "Κατάσταση", 
+                        options=["Pending", "Assigned", "Collected"], 
+                        required=True
+                    ),
+                    "Assigned_Plate": st.column_config.SelectboxColumn(
+                        "Ανάθεση σε Πινακίδα", 
+                        options=available_plates
+                    ),
                 },
                 hide_index=True, 
                 use_container_width=True, 
-                key="admin_pickup_editor_v1" # Άλλαξα το key για να αναγκάσω το streamlit να κάνει refresh
+                key="admin_pickup_editor_v2" # Νέο key για φρέσκο state
             )
             
             if st.button("💾 Αποθήκευση Αναθέσεων", type="primary"):
-                conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=edited_pickups.fillna(""))
+                # Πριν το update, σιγουρευόμαστε ότι δεν υπάρχουν NaNs που χαλάνε το format
+                final_df = edited_pickups.fillna("")
+                conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=final_df)
                 st.success("Οι αναθέσεις ενημερώθηκαν!")
+                st.cache_data.clear() # Καθαρίζουμε την cache για να δουν όλοι τις αλλαγές
                 time.sleep(0.5)
                 st.rerun()
-        else:
+                else:
             # Debugging αν δεν εμφανίζεται ο πίνακας
             st.info("Δεν βρέθηκαν εκκρεμείς παραλαβές στο Sheet.")
             if pickups_df is not None:
