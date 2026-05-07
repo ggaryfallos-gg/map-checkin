@@ -70,7 +70,7 @@ def gr_num(val, decimals=1):
 def get_supplier_pickups():
     try:
         # Διάβασμα από το tab "Supplier_Pickups"
-        df = conn.read(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", ttl=0)
+        df = conn.read(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", ttl=5)
         return df
     except:
         return pd.DataFrame()
@@ -89,7 +89,7 @@ if "track" in st.query_params:
         st.cache_data.clear()
     
     try:
-        transit = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
+        transit = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=5)
         transit.columns = transit.columns.str.strip()
         
         if 'Plate' in transit.columns:
@@ -577,7 +577,7 @@ if app_mode == "🚛 Driver Terminal":
 # --- 2. ADMIN DASHBOARD ---
 elif app_mode == "📊 Admin Dashboard":
   st.title("Admin Control Panel")
-  logs = conn.read(spreadsheet=LOG_URL, ttl=0)
+  logs = conn.read(spreadsheet=LOG_URL, ttl=2)
   st.dataframe(logs.tail(20), use_container_width=True)
 
 # --- ΤΜΗΜΑ 1: ΚΑΤΑΧΩΡΗΣΗ ΝΕΑΣ ΠΑΡΑΛΑΒΗΣ ---
@@ -682,8 +682,8 @@ elif app_mode == "📊 Admin Dashboard":
               
           else:
               st.info("Δεν υπάρχουν εκκρεμείς παραλαβές στο σύστημα.")
-          #except Exception as e:
-          #        st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {e}")
+    except Exception as e:
+                  st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {e}")
 
 
 
