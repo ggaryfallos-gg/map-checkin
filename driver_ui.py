@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
+from streamlit_js_eval import get_geolocation # ΑΥΤΟ ΕΛΕΙΠΕ
 from datetime import datetime
 import time
-from utils import gr_num, get_osrm_data
+from utils import gr_num, get_osrm_data # Τα εργαλεία που φτιάξαμε
 
 
 def render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME):
