@@ -196,7 +196,7 @@ def render_admin_dashboard(all_data, conn, LOG_URL):
                 st.cache_data.clear() # Καθαρίζουμε την cache για να δουν όλοι τις αλλαγές
                 time.sleep(0.5)
                 st.rerun()
-                else:
+            else:
             # Debugging αν δεν εμφανίζεται ο πίνακας
             st.info("Δεν βρέθηκαν εκκρεμείς παραλαβές στο Sheet.")
             if pickups_df is not None:
