@@ -118,7 +118,7 @@ def render_admin_dashboard(all_data, conn, LOG_URL):
                             "Status": "Pending", "Assigned_Plate": "", "Lat": lat or 0.0, "Lon": lon or 0.0
                         }])
                         conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", 
-                                    data=pd.concat([get_supplier_pickups(conn, LOG_URL), new_pickup_df]))
+                                    data=updated_data.fillna(""))
                         st.success(f"Καταχωρήθηκε: {s_name}")
                         time.sleep(0.5); st.rerun()
 
