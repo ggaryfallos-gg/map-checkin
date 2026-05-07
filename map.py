@@ -548,26 +548,26 @@ if app_mode == "🚛 Driver Terminal":
         st.warning("Υπολογίστε το δρομολόγιο στο Tab 2.")
     # Στο σημείο που ορίζεις τα tabs του οδηγού:
 
-  with tab6:
-    st.subheader("Παραλαβές από Προμηθευτές")
-    all_pickups = get_supplier_pickups()
-    
-    # Φιλτράρισμα μόνο για το συγκεκριμένο φορτηγό
-    my_tasks = all_pickups[(all_pickups['Assigned_Plate'] == st.session_state.user_plate) & 
-                           (all_pickups['Status'] == 'Assigned')]
-    
-    if not my_tasks.empty:
-        for _, p in my_tasks.iterrows():
-            st.warning(f"📍 **{p['Supplier_Name']}** - {p['Address']}")
-            # Κουμπί πλοήγησης
-            gmaps_pickup = f"https://www.google.com/maps/search/?api=1&query={p['Lat']},{p['Lon']}"
-            st.markdown(f"[🗺️ Οδηγίες Πλοήγησης]({gmaps_pickup})")
-            
-            if st.button(f"✅ Ολοκλήρωση Παραλαβής: {p['Supplier_Name']}"):
-                # Logic για αλλαγή status σε 'Collected' στο GSheet
-                st.rerun()
-    else:
-        st.info("Δεν έχετε προγραμματισμένες παραλαβές για σήμερα.")
+    with tab6:
+      st.subheader("Παραλαβές από Προμηθευτές")
+      all_pickups = get_supplier_pickups()
+      
+      # Φιλτράρισμα μόνο για το συγκεκριμένο φορτηγό
+      my_tasks = all_pickups[(all_pickups['Assigned_Plate'] == st.session_state.user_plate) & 
+                             (all_pickups['Status'] == 'Assigned')]
+      
+      if not my_tasks.empty:
+          for _, p in my_tasks.iterrows():
+              st.warning(f"📍 **{p['Supplier_Name']}** - {p['Address']}")
+              # Κουμπί πλοήγησης
+              gmaps_pickup = f"https://www.google.com/maps/search/?api=1&query={p['Lat']},{p['Lon']}"
+              st.markdown(f"[🗺️ Οδηγίες Πλοήγησης]({gmaps_pickup})")
+              
+              if st.button(f"✅ Ολοκλήρωση Παραλαβής: {p['Supplier_Name']}"):
+                  # Logic για αλλαγή status σε 'Collected' στο GSheet
+                  st.rerun()
+      else:
+          st.info("Δεν έχετε προγραμματισμένες παραλαβές για σήμερα.")
 
 
 
