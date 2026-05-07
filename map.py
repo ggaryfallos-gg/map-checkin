@@ -642,9 +642,64 @@ elif app_mode == "📊 Admin Dashboard":
     # --- TAB 2: ΔΙΑΧΕΙΡΙΣΗ ΠΑΡΑΛΑΒΩΝ ---
     with admin_tab2:
         st.header("Διαχείριση Παραλαβών Προμηθευτών")
-        # Εδώ συνεχίζει ο κώδικας για το Supplier Pickups (Form & Editor)
-        # ... (Ο κώδικας που είχαμε φτιάξει για το Tab 2) ...
-
+        # --- ΤΜΗΜΑ 2: ΔΙΑΧΕΙΡΙΣΗ & ΑΝΑΘΕΣΗ ΠΑΡΑΛΑΒΩΝ ---
+            st.subheader("📋 Προγραμματισμός & Ανάθεση σε Φορτηγά")
+            
+            try:
+                pickups_df = get_supplier_pickups()
+                
+                if not pickups_df.empty:
+                    # 1. Δυναμική Λήψη Πινακίδων
+                    available_plates = []
+                    if 'all_data' in globals() and not all_data.empty:
+                        available_plates = sorted(all_data['Truck License Plate'].dropna().unique().tolist())
+                    
+                    # Αν η λίστα είναι ακόμα άδεια, προσθέτουμε χειροκίνητα μερικές ή την κάνουμε TextColumn
+                    if not available_plates:
+                        available_plates = ["KIE6761", "KIE6762"] # Βάλε εδώ τις βασικές σου πινακίδες
+        
+                    # 2. Επεξεργασία πίνακα
+                    edited_df = st.data_editor(
+                        pickups_df,
+                        column_config={
+                            "Date": st.column_config.TextColumn("Ημερομηνία", disabled=True),
+                            "Supplier_Name": st.column_config.TextColumn("Προμηθευτής", disabled=True),
+                            "Status": st.column_config.SelectboxColumn(
+                                "Κατάσταση",
+                                options=["Pending", "Assigned", "Collected"],
+                                required=True
+                            ),
+                            "Assigned_Plate": st.column_config.SelectboxColumn(
+                                "Ανάθεση σε Πινακίδα",
+                                options=available_plates,
+                                help="Αν δεν βλέπετε την πινακίδα, ελέγξτε το SHIPMENTS_URL"
+                            ),
+                            "ID": None, "Lat": None, "Lon": None, "Address": None, "Area": None
+                        },
+                        hide_index=True,
+                        use_container_width=True,
+                        key="pickup_manager_v54"
+                    )
+        
+                    if st.button("💾 Αποθήκευση Αλλαγών Ανάθεσης", type="primary"):
+                        try:
+                            df_to_save = edited_df.fillna("")
+                            # Διασφάλιση ότι οι κρίσιμες στήλες είναι strings
+                            df_to_save['Assigned_Plate'] = df_to_save['Assigned_Plate'].astype(str)
+                            df_to_save['Status'] = df_to_save['Status'].astype(str)
+                            
+                            conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=df_to_save)
+                            
+                            st.success("✅ Οι αλλαγές αποθηκεύτηκαν!")
+                            time.sleep(0.5)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Σφάλμα API: {e}")
+                else:
+                    st.info("Δεν υπάρχουν εκκρεμείς παραλαβές.")
+            
+    except Exception as ex:
+        st.error(f"Σφάλμα: {ex}")
     # --- TAB 3: GPS LOGS ---
     with admin_tab3:
         st.header("Live Activity Logs")
