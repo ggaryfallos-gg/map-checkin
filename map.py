@@ -677,7 +677,7 @@ elif app_mode == "📊 Admin Dashboard":
                   st.success("Οι αλλαγές αποθηκεύτηκαν!")
                   time.sleep(1)
                   st.rerun()
-          else:
+        else:
               st.info("Δεν υπάρχουν εκκρεμείς παραλαβές στο σύστημα.")
           
       except Exception as e:
