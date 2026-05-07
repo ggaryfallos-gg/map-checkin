@@ -266,12 +266,12 @@ if app_mode == "🚛 Driver Terminal":
         #dates_avail = all_data[all_data['Truck License Plate'] == plate_sel]['Loading_Date'].unique()
         #date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", dates_avail, key="unique_date_sel")
         
-        if st.button("🚀 Έναρξη Βάρδιας", type="primary", use_container_width=True):
-            st.session_state.user_plate = plate_sel.replace(' ', '').upper()
-            st.session_state.display_plate = plate_sel
-            st.session_state.loading_date = date_sel
-            st.session_state.is_logged_in = True
-            st.rerun()
+        #if st.button("🚀 Έναρξη Βάρδιας", type="primary", use_container_width=True):
+        #    st.session_state.user_plate = plate_sel.replace(' ', '').upper()
+        #    st.session_state.display_plate = plate_sel
+        #    st.session_state.loading_date = date_sel
+        #    st.session_state.is_logged_in = True
+        #    st.rerun()
 
     # 2. ΕΛΕΓΧΟΣ: Αν επιλέχθηκε φορτηγό ΑΛΛΑ δεν έγινε ακόμα το Inspection
     elif not st.session_state.inspected:
