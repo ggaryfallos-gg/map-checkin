@@ -5,6 +5,7 @@ import requests
 import urllib.parse
 import time
 import matplotlib
+import jinja2
 from streamlit_folium import st_folium
 from streamlit_js_eval import get_geolocation
 from geopy.distance import geodesic
@@ -672,9 +673,7 @@ elif app_mode == "📊 Admin Dashboard":
                     values='Total KG', 
                     aggfunc='sum'
                 ).fillna(0)
-
-                st.subheader("📅 Χρονοδιάγραμμα Φόρτωσης (Capacity Heatmap)")
-                st.write("Οπτικοποίηση βάρους ανά ημέρα. Το σκούρο χρώμα υποδεικνύει πλήρες φορτίο.")
+               
                 
                 # Εμφάνιση Heatmap Table
                 if not planning_df.empty:
@@ -687,6 +686,7 @@ elif app_mode == "📊 Admin Dashboard":
                     ).fillna(0)
         
                     st.subheader("📅 Χρονοδιάγραμμα Φόρτωσης (Heatmap)")
+                    st.write("Οπτικοποίηση βάρους ανά ημέρα. Το σκούρο χρώμα υποδεικνύει πλήρες φορτίο.")
                     
                     # 2. Υπολογισμός δυναμικού ορίου για τα χρώματα
                     # Αν όλες οι τιμές είναι μικρές, το 'high' θα προσαρμοστεί για να βλέπεις χρώματα
