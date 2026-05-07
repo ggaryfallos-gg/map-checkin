@@ -46,7 +46,7 @@ def gr_num(val, decimals=1):
     return s.replace(',', 'X').replace('.', ',').replace('X', '.')
 
 @st.cache_data(ttl=60)
-def get_supplier_pickups():
+def get_supplier_pickups(_conn, log_url):
     try:
         df = conn.read(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", ttl=10)
         return df
