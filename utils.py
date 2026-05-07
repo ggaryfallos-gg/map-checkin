@@ -50,6 +50,5 @@ def get_supplier_pickups():
     except:
         return pd.DataFrame()
 
-@st.cache_data(ttl=600)
 def get_cached_geodesic(p1, p2):
     return geodesic(p1, p2).km
