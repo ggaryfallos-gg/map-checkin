@@ -95,7 +95,9 @@ def render_admin_dashboard(all_data, conn, LOG_URL):
         else:
             st.info("Αναμονή για δεδομένα από το SHIPMENTS_URL...")
 
-    # --- TAB 2: ΔΙΑΧΕΙΡΙΣΗ ΠΑΡΑΛΑΒΩΝ ---
+# --- admin_ui.py ---
+# --- TAB 2: ΔΙΑΧΕΙΡΙΣΗ ΠΑΡΑΛΑΒΩΝ ---
+
 with admin_tab2:
     st.header("Διαχείριση Παραλαβών Προμηθευτών")
     
@@ -112,10 +114,10 @@ with admin_tab2:
 
             if st.form_submit_button("Οριστική Υποβολή"):
                 if s_name and s_addr:
-                    # Geocoding
+                    # Α. Geocoding (Μόνο στο Submit για efficiency)
                     lat, lon = geocode_address(s_addr, "")
                     
-                    # Δημιουργία νέας εγγραφής
+                    # Β. Δημιουργία νέας εγγραφής
                     new_entry_df = pd.DataFrame([{
                         "ID": int(time.time()), 
                         "Date": p_date.strftime("%d/%m/%Y"),
@@ -128,18 +130,24 @@ with admin_tab2:
                         "Lon": lon or 0.0
                     }])
                     
-                    # Λήψη υπαρχόντων και συνένωση
+                    # Γ. Λήψη υπαρχόντων (Χρήση _conn από το signature)
                     current_pickups = get_supplier_pickups(conn, LOG_URL)
+                    
+                    # Δ. ΣΥΝΕΝΩΣΗ (Εδώ ορίζεται η updated_data)
                     updated_data = pd.concat([current_pickups, new_entry_df], ignore_index=True)
                     
-                    # Ενημέρωση Google Sheets
-                    conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=updated_data.fillna(""))
+                    # Ε. ΕΝΗΜΕΡΩΣΗ
+                    conn.update(
+                        spreadsheet=LOG_URL, 
+                        worksheet="Supplier_Pickups", 
+                        data=updated_data.fillna("")
+                    )
                     
                     st.success(f"Καταχωρήθηκε: {s_name}")
                     time.sleep(0.5)
                     st.rerun()
                 else:
-                    st.error("Συμπληρώστε Όνομα και Διεύθυνση!")
+                    st.error("Παρακαλώ συμπληρώστε Όνομα και Διεύθυνση!")
 
     st.divider()
 
@@ -149,7 +157,7 @@ with admin_tab2:
     if not pickups_df.empty:
         st.subheader("📦 Λίστα Εκκρεμών Παραλαβών")
         
-        # Προετοιμασία πινακίδων για το dropdown
+        # Λήψη πινακίδων για το dropdown
         raw_plates = all_data['Truck License Plate'].dropna().unique().tolist()
         available_plates = sorted([str(p) for p in raw_plates])
         
@@ -166,7 +174,7 @@ with admin_tab2:
         )
         
         if st.button("💾 Αποθήκευση Αναθέσεων", type="primary"):
-            # Εδώ αποθηκεύουμε τις αλλαγές από τον data_editor
+            # Αποθηκεύουμε το edited_pickups απευθείας
             conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=edited_pickups.fillna(""))
             st.success("Οι αναθέσεις ενημερώθηκαν!")
             time.sleep(0.5)
