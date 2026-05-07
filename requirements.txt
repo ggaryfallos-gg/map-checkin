@@ -6,3 +6,4 @@ streamlit-js-eval
 geopy
 st-gsheets-connection
 requests
+matplotlib
