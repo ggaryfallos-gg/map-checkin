@@ -579,7 +579,7 @@ elif app_mode == "📊 Admin Dashboard":
   logs = conn.read(spreadsheet=LOG_URL, ttl=0)
   st.dataframe(logs.tail(20), use_container_width=True)
 
-  # --- ΤΜΗΜΑ 1: ΚΑΤΑΧΩΡΗΣΗ ΝΕΑΣ ΠΑΡΑΛΑΒΗΣ ---
+# --- ΤΜΗΜΑ 1: ΚΑΤΑΧΩΡΗΣΗ ΝΕΑΣ ΠΑΡΑΛΑΒΗΣ ---
   with st.expander("➕ Καταχώρηση Νέας Παραλαβής από Προμηθευτή", expanded=False):
       with st.form("new_pickup", clear_on_submit=True):
           col1, col2 = st.columns(2)
@@ -658,22 +658,22 @@ elif app_mode == "📊 Admin Dashboard":
                       help="Επιλέξτε το φορτηγό που θα εκτελέσει την παραλαβή"
                   ),
                   "ID": None, "Lat": None, "Lon": None, "Address": None # Κρύβουμε τεχνικές στήλες
-                },
-                hide_index=True,
-                use_container_width=True,
-                key="pickup_manager"
-            )
+              },
+              hide_index=True,
+              use_container_width=True,
+              key="pickup_manager"
+          )
 
-            if st.button("💾 Αποθήκευση Αλλαγών Ανάθεσης", type="primary"):
-                conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=edited_df)
-                st.success("Οι αλλαγές αποθηκεύτηκαν!")
-                time.sleep(1)
-                st.rerun()
-        else:
-            st.info("Δεν υπάρχουν εκκρεμείς παραλαβές στο σύστημα.")
-            
-    except Exception as e:
-        st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {e}")
+          if st.button("💾 Αποθήκευση Αλλαγών Ανάθεσης", type="primary"):
+              conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=edited_df)
+              st.success("Οι αλλαγές αποθηκεύτηκαν!")
+              time.sleep(1)
+              st.rerun()
+      else:
+          st.info("Δεν υπάρχουν εκκρεμείς παραλαβές στο σύστημα.")
+          
+  except Exception as e:
+      st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {e}")
 
 
   
