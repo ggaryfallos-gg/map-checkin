@@ -578,20 +578,49 @@ elif app_mode == "📊 Admin Dashboard":
   st.title("Admin Control Panel")
   logs = conn.read(spreadsheet=LOG_URL, ttl=0)
   st.dataframe(logs.tail(20), use_container_width=True)
-  
-# --- ΝΕΟ: Φόρμα Καταχώρησης Παραλαβών ---
   with st.expander("➕ Καταχώρηση Νέας Παραλαβής από Προμηθευτή"):
-      with st.form("new_pickup"):
-          col1, col2 = st.columns(2)
-          s_name = col1.text_input("Όνομα Προμηθευτή")
-          s_addr = col2.text_input("Διεύθυνση & Πόλη")
-          s_area = st.selectbox("Περιοχή", ["Σίνδος", "Καλοχώρι", "Οινόφυτα", "Σχηματάρι", "Ασπρόπυργος"])
-          
-          if st.form_submit_button("Υποβολή"):
-              lat, lon = geocode_address(s_addr, "")
-              # Εδώ μπαίνει η λογική update του GSheet
-              st.success(f"Η παραλαβή από {s_name} καταχωρήθηκε.")
-
+          with st.form("new_pickup", clear_on_submit=True):
+              col1, col2 = st.columns(2)
+              s_name = col1.text_input("Όνομα Προμηθευτή")
+              s_addr = col2.text_input("Διεύθυνση & Πόλη")
+              s_area = st.selectbox("Περιοχή", ["Σίνδος", "Καλοχώρι", "Οινόφυτα", "Σχηματάρι", "Ασπρόπυργος"])
+              
+              submit = st.form_submit_button("Υποβολή")
+              
+              if submit:
+                  if s_name and s_addr:
+                      # 1. Γεωκωδικοποίηση
+                      lat, lon = geocode_address(s_addr, "")
+                      
+                      # 2. Προετοιμασία νέας γραμμής
+                      new_data = pd.DataFrame([{
+                          "ID": int(time.time()), # Μοναδικό ID βασισμένο στο χρόνο
+                          "Supplier_Name": s_name,
+                          "Address": s_addr,
+                          "Area": s_area,
+                          "Status": "Pending",
+                          "Assigned_Plate": "",
+                          "Lat": lat if lat else 0.0,
+                          "Lon": lon if lon else 0.0
+                      }])
+                      
+                      try:
+                          # 3. Διάβασμα υπαρχόντων δεδομένων
+                          existing_df = conn.read(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", ttl=0)
+                          
+                          # 4. Συνένωση και Update
+                          updated_df = pd.concat([existing_df, new_data], ignore_index=True)
+                          conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=updated_df)
+                          
+                          st.success(f"✅ Η παραλαβή από {s_name} καταχωρήθηκε επιτυχώς!")
+                          time.sleep(1)
+                          st.rerun()
+                      except Exception as e:
+                          st.error(f"Σφάλμα κατά την εγγραφή: {e}")
+                  else:
+                      st.warning("Παρακαλώ συμπληρώστε Όνομα και Διεύθυνση.")
+# --- ΝΕΟ: Φόρμα Καταχώρησης Παραλαβών ---
+  
 # --- ΝΕΟ: Assignment Table ---
   st.subheader("Εκκρεμείς Παραλαβές")
   pickups_df = get_supplier_pickups()
