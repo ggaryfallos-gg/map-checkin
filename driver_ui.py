@@ -406,7 +406,7 @@ def render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, 
 
         with tab6:
             st.subheader("📦 Παραλαβές από Προμηθευτές")
-            all_pickups = get_supplier_pickups()
+            all_pickups = get_supplier_pickups(conn, LOG_URL)
             
             if not all_pickups.empty:
                 # Συγκρίνουμε χωρίς κενά και με κεφαλαία
