@@ -4,7 +4,7 @@ from utils import clean_val
 
 # --- DATA PIPELINE ---
 @st.cache_data(ttl=300, show_spinner="Φόρτωση δεδομένων από Google Sheets...")
-def load_full_data():
+def load_full_data(_conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL):
     ship = _conn.read(spreadsheet=SHIPMENTS_URL, ttl=300)
     ship.columns = ship.columns.str.strip()
     ship['Plate_Clean'] = ship['Truck License Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
@@ -15,7 +15,7 @@ def load_full_data():
         if c in ship.columns: ship[c] = ship[c].apply(clean_val)
     
     try:
-        dels = conn.read(spreadsheet=DELIVERIES_URL, ttl=300)
+        dels = _conn.read(spreadsheet=DELIVERIES_URL, ttl=300)
         dels.columns = dels.columns.str.strip()
         dels['Delivery'] = dels['Delivery'].astype(str).str.strip().str.replace('.0', '', regex=False).str.lstrip('0')
         dels_sub = dels[['Delivery', 'Act. Gds Mvmnt Date']].drop_duplicates('Delivery')
@@ -26,7 +26,7 @@ def load_full_data():
         ship['Loading_Date'] = 'Άγνωστη Ημ/νία'
 
     try:
-        cus_df = conn.read(spreadsheet=CUSADDRESS_URL, ttl=300)
+        cus_df = _conn.read(spreadsheet=CUSADDRESS_URL, ttl=300)
         cus_df.columns = cus_df.columns.str.strip()
         for col in ['Name', 'Street', 'Telephone 1', 'Postal Code', 'Latitude', 'Longitude']:
             if col not in cus_df.columns: cus_df[col] = ''
@@ -41,7 +41,7 @@ def load_full_data():
         df = ship.copy()
         df['Street'], df['Telephone 1'], df['Postal Code'], df['Lat_exact'], df['Lon_exact'] = '', '', '', None, None
 
-    coords = conn.read(spreadsheet=COORDS_URL, ttl=300)
+    coords = .read(spreadsheet=COORDS_URL, ttl=300)
     coords.columns = coords.columns.str.strip()
     coords['City_Match'] = coords['City'].astype(str).str.strip().str.upper()
     coords = coords.rename(columns={'Latitude': 'Lat_city', 'Longitude': 'Lon_city'})
