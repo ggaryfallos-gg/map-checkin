@@ -365,6 +365,9 @@ if app_mode == "🚛 Driver Terminal":
         user_data = all_data[(all_data['Plate_Clean'] == st.session_state.user_plate) & (all_data['Loading_Date'] == st.session_state.loading_date)].copy()
         gps = get_geolocation()
         curr_loc = (gps['coords']['latitude'], gps['coords']['longitude']) if gps and 'coords' in gps else (41.0, 22.8)
+        if gps and 'coords' in gps:
+            st.session_state.last_lat = gps['coords']['latitude']
+            st.session_state.last_lon = gps['coords']['longitude']
 
         new_coords_batch = []
         for idx, row in user_data.iterrows():
