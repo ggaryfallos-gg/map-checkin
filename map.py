@@ -4,6 +4,7 @@ import folium
 import requests
 import urllib.parse
 import time
+import matplotlib
 from streamlit_folium import st_folium
 from streamlit_js_eval import get_geolocation
 from geopy.distance import geodesic
