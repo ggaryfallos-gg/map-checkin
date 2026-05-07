@@ -549,8 +549,8 @@ if app_mode == "🚛 Driver Terminal":
                         "Accessories_KG": a_kg,
                         "Unload_Mins": round(dur, 1),
                         "Photo": "Yes" if photo else "No",
-                        "Latitude": curr_lat,  # <--- ΠΡΟΣΘΗΚΗ
-                        "Longitude": curr_lon   # <--- ΠΡΟΣΘΗΚΗ
+                        "Checkin_Lat": curr_lat,  # <--- ΠΡΟΣΘΗΚΗ
+                        "Checkin_Lon": curr_lon   # <--- ΠΡΟΣΘΗΚΗ
                     }])
                     
                     try:
