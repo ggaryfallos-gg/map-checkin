@@ -295,7 +295,8 @@ if app_mode == "🚛 Driver Terminal":
 
     # 3. ΚΥΡΙΩΣ TERMINAL: Εμφανίζεται μόνο αν έχουν περάσει τα παραπάνω
     else:
-        1==1
+        st.subheader(f"🚚 {st.session_state.display_plate} | {st.session_state.loading_date}")
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD", "📊 Analytics", "📩 Alert", "🏭 Παραλαβές"])
         # ... υπόλοιπα tabs ...
         
     
@@ -393,7 +394,7 @@ if app_mode == "🚛 Driver Terminal":
                 load_full_data.clear()
                 st.toast(f"✅ Αποθηκεύτηκαν {len(new_coords_batch)} διευθύνσεις!")
 
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD", "📊 Analytics", "📩 Alert", "🏭 Παραλαβές"])    
+        #tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD", "📊 Analytics", "📩 Alert", "🏭 Παραλαβές"])    
 
         with tab1:
             st.write("Σημεία εκφόρτωσης:")
