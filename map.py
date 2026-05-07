@@ -294,7 +294,7 @@ if app_mode == "🚛 Driver Terminal":
                     st.rerun()
                 else:
                     st.error("Επιλέξτε όλα τα πεδία.")
-    st.stop()
+        st.stop()
 
     # 3. ΚΥΡΙΩΣ TERMINAL: Εμφανίζεται μόνο αν έχουν περάσει τα παραπάνω
     else:
