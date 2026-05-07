@@ -98,7 +98,7 @@ def render_admin_dashboard(all_data, conn, LOG_URL):
 # --- admin_ui.py ---
 # --- TAB 2: ΔΙΑΧΕΙΡΙΣΗ ΠΑΡΑΛΑΒΩΝ ---
 
-with admin_tab2:
+    with admin_tab2:
     st.header("Διαχείριση Παραλαβών Προμηθευτών")
     
     # 1. Φόρμα Νέας Παραλαβής
