@@ -298,8 +298,8 @@ if app_mode == "🚛 Driver Terminal":
     # 3. ΚΥΡΙΩΣ TERMINAL: Εμφανίζεται μόνο αν έχουν περάσει τα παραπάνω
     else:
         st.subheader(f"🚚 {st.session_state.display_plate} | {st.session_state.loading_date}")
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD", "📊 Analytics", "📩 Alert", "🏭 Παραλαβές"])
-        # ... υπόλοιπα tabs ...
+        #tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD", "📊 Analytics", "📩 Alert", "🏭 Παραλαβές"])
+       
         
     
     if st.session_state.user_plate is None:
@@ -397,7 +397,7 @@ if app_mode == "🚛 Driver Terminal":
                 st.toast(f"✅ Αποθηκεύτηκαν {len(new_coords_batch)} διευθύνσεις!")
 
        
-
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD", "📊 Analytics", "📩 Alert", "🏭 Παραλαβές"])
         with tab1:
             st.write("Σημεία εκφόρτωσης:")
             m1 = folium.Map(location=curr_loc, zoom_start=7)
@@ -691,7 +691,7 @@ elif app_mode == "📊 Admin Dashboard":
                     # 2. Υπολογισμός δυναμικού ορίου για τα χρώματα
                     # Αν όλες οι τιμές είναι μικρές, το 'high' θα προσαρμοστεί για να βλέπεις χρώματα
                     max_val = pivot_planning.max().max()
-                    if max_val < 1: max_val = 10000 # Safety check
+                    if max_val < 1: max_val = 24000 # Safety check
         
                     # 3. Εφαρμογή Heatmap Styling
                     styled_df = pivot_planning.style.background_gradient(
