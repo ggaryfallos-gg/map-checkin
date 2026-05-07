@@ -678,12 +678,12 @@ elif app_mode == "📊 Admin Dashboard":
                   time.sleep(1)
                   st.rerun()
               except Exception as e:
-                  st.error(f"❌ Σφάλμα API: Βεβαιωθείτε ότι το Sheet είναι Shared με δικαιώματα Editor. Λεπτομέρειες: {e}")
+                                    st.error(f"❌ Σφάλμα API: Βεβαιωθείτε ότι το Sheet είναι Shared με δικαιώματα Editor. Λεπτομέρειες: {e}")
               
           else:
               st.info("Δεν υπάρχουν εκκρεμείς παραλαβές στο σύστημα.")
     except Exception as e:
-                  st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {e}")
+                          st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {e}")
 
 
 
