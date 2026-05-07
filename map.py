@@ -55,7 +55,7 @@ if st.session_state.password_correct:
     app_mode = st.sidebar.radio("Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
     
     if app_mode == "🚛 Driver Terminal":
-        render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+        render_driver_terminal(all_data, fleet_info, _conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
     else:
         render_admin_dashboard(all_data, conn, LOG_URL)
 
