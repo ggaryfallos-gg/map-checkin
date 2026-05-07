@@ -666,15 +666,22 @@ elif app_mode == "📊 Admin Dashboard":
           )
 
           if st.button("💾 Αποθήκευση Αλλαγών Ανάθεσης", type="primary"):
-              conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=edited_df)
-              st.success("Οι αλλαγές αποθηκεύτηκαν!")
-              time.sleep(1)
-              st.rerun()
-      else:
-          st.info("Δεν υπάρχουν εκκρεμείς παραλαβές στο σύστημα.")
+              try:
+                  # Καθαρίζουμε το DataFrame από τυχόν NaN τιμές που "χτυπάνε" στο API της Google
+                  df_to_save = edited_df.fillna("")
+        
+                  # Μετατροπή όλων των στηλών σε string/numeric για να μην μπερδεύεται το API
+                  df_to_save['Assigned_Plate'] = df_to_save['Assigned_Plate'].astype(str)
+                  df_to_save['Status'] = df_to_save['Status'].astype(str)
+                  conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=edited_df)
+                  st.success("Οι αλλαγές αποθηκεύτηκαν!")
+                  time.sleep(1)
+                  st.rerun()
+          else:
+              st.info("Δεν υπάρχουν εκκρεμείς παραλαβές στο σύστημα.")
           
-  except Exception as e:
-      st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {e}")
+      except Exception as e:
+          st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {e}")
 
 
   
