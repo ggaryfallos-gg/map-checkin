@@ -141,13 +141,13 @@ def render_admin_dashboard(all_data, conn, LOG_URL):
                 },
                 hide_index=True, use_container_width=True, key="admin_pickup_editor"
             )
-            # 2. Ορισμός του DataFrame (ΕΔΩ ΗΤΑΝ ΤΟ ΣΦΑΛΜΑ)
-                new_pickup_df = pd.DataFrame([new_entry])
-                
-                # 3. Λήψη υπαρχόντων και συνένωση
-                # Περνάμε conn και LOG_URL όπως ορίσαμε στο νέο signature
-                current_pickups = get_supplier_pickups(conn, LOG_URL)
-                updated_data = pd.concat([current_pickups, new_pickup_df], ignore_index=True)
+        # 2. Ορισμός του DataFrame (ΕΔΩ ΗΤΑΝ ΤΟ ΣΦΑΛΜΑ)
+            new_pickup_df = pd.DataFrame([new_entry])
+            
+            # 3. Λήψη υπαρχόντων και συνένωση
+            # Περνάμε conn και LOG_URL όπως ορίσαμε στο νέο signature
+            current_pickups = get_supplier_pickups(conn, LOG_URL)
+            updated_data = pd.concat([current_pickups, new_pickup_df], ignore_index=True)
             
             if st.button("💾 Αποθήκευση Αναθέσεων", type="primary"):
                 conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=edited_pickups.fillna(""))
