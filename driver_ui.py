@@ -7,6 +7,7 @@ from datetime import datetime
 import time
 from utils import gr_num, get_osrm_data, geocode_address,get_supplier_pickups
 from geopy.distance import geodesic
+import urllib.parse
 
 
 def render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME):
