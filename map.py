@@ -678,31 +678,31 @@ elif app_mode == "📊 Admin Dashboard":
                 
                 # Εμφάνιση Heatmap Table
                 if not planning_df.empty:
-                # 1. Δημιουργία Pivot με καθαρούς αριθμούς (float/int)
-                pivot_planning = planning_df.pivot_table(
-                    index='Truck License Plate', 
-                    columns='Loading_Date', 
-                    values='Total KG', 
-                    aggfunc='sum'
-                ).fillna(0)
-    
-                st.subheader("📅 Χρονοδιάγραμμα Φόρτωσης (Heatmap)")
-                
-                # 2. Υπολογισμός δυναμικού ορίου για τα χρώματα
-                # Αν όλες οι τιμές είναι μικρές, το 'high' θα προσαρμοστεί για να βλέπεις χρώματα
-                max_val = pivot_planning.max().max()
-                if max_val < 1: max_val = 24000 # Safety check
-    
-                # 3. Εφαρμογή Heatmap Styling
-                styled_df = pivot_planning.style.background_gradient(
-                    cmap='YlOrRd',    # Κίτρινο -> Πορτοκαλί -> Κόκκινο
-                    axis=None,        # Σύγκριση σε όλο τον πίνακα
-                    low=0, 
-                    high=max_val      # Το μέγιστο βάρος θα είναι το πιο σκούρο κόκκινο
-                ).format("{:,.0f} kg") # Προσθήκη μονάδας μέτρησης μόνο στην απεικόνιση
-    
-                # 4. Εμφάνιση
-                st.dataframe(styled_df, use_container_width=True)
+                    # 1. Δημιουργία Pivot με καθαρούς αριθμούς (float/int)
+                    pivot_planning = planning_df.pivot_table(
+                        index='Truck License Plate', 
+                        columns='Loading_Date', 
+                        values='Total KG', 
+                        aggfunc='sum'
+                    ).fillna(0)
+        
+                    st.subheader("📅 Χρονοδιάγραμμα Φόρτωσης (Heatmap)")
+                    
+                    # 2. Υπολογισμός δυναμικού ορίου για τα χρώματα
+                    # Αν όλες οι τιμές είναι μικρές, το 'high' θα προσαρμοστεί για να βλέπεις χρώματα
+                    max_val = pivot_planning.max().max()
+                    if max_val < 1: max_val = 24000 # Safety check
+        
+                    # 3. Εφαρμογή Heatmap Styling
+                    styled_df = pivot_planning.style.background_gradient(
+                        cmap='YlOrRd',    # Κίτρινο -> Πορτοκαλί -> Κόκκινο
+                        axis=None,        # Σύγκριση σε όλο τον πίνακα
+                        low=0, 
+                        high=max_val      # Το μέγιστο βάρος θα είναι το πιο σκούρο κόκκινο
+                    ).format("{:,.0f} kg") # Προσθήκη μονάδας μέτρησης μόνο στην απεικόνιση
+        
+                    # 4. Εμφάνιση
+                    st.dataframe(styled_df, use_container_width=True)
 
                 st.divider()
                 
