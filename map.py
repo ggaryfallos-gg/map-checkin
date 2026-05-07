@@ -458,32 +458,50 @@ if app_mode == "🚛 Driver Terminal":
                 st_folium(m2, width="100%", height=450, key=f"routing_map_{hash(str(st.session_state.route_data))}")
 
         with tab3:
-            st.subheader("POD Protocol")
+            st.subheader("📦 POD Protocol")
             custList = [s['name'] for s in st.session_state.route_data] if st.session_state.route_data else sorted(user_data['Name'].unique())
-            active_cust = st.selectbox("Πελάτης", custList)
+            active_cust = st.selectbox("Επιλογή Πελάτη", custList, key="pod_cust_sel")
             cust_rows = user_data[user_data['Name'] == active_cust]
-            use_cam = st.checkbox("Ενεργοποίηση Κάμερας")
-            photo = st.camera_input("📸 Φωτογραφία") if use_cam else None
+            
+            use_cam = st.checkbox("📸 Ενεργοποίηση Κάμερας", key="pod_cam_toggle")
+            photo = st.camera_input("Λήψη Φωτογραφίας") if use_cam else None
             
             c1, c2 = st.columns(2)
-            if c1.button("▶️ Άφιξη", use_container_width=True):
+            if c1.button("▶️ Άφιξη", use_container_width=True, key="btn_arrival"):
                 st.session_state.start_time = datetime.now(GR_TIME)
-                st.success("Η ώρα άφιξης καταγράφηκε.")
-            if c2.button("⏹️ Sync POD", type="primary", use_container_width=True):
+                st.success(f"Καταγράφηκε άφιξη: {st.session_state.start_time.strftime('%H:%M')}")
+
+            if c2.button("⏹️ Sync POD", type="primary", use_container_width=True, key="btn_sync_pod"):
                 if st.session_state.start_time:
                     dur = (datetime.now(GR_TIME) - st.session_state.start_time).total_seconds() / 60
                     p_kg = cust_rows[['Unpainted', 'White', 'Colored']].sum().sum()
                     a_kg = cust_rows['Accessories'].sum()
+                    
                     new_log = pd.DataFrame([{
                         "Timestamp": datetime.now(GR_TIME).strftime('%Y-%m-%d %H:%M:%S'),
-                        "Driver": st.session_state.username, "Plate": st.session_state.display_plate,
-                        "Customer": active_cust, "Profiles_KG": p_kg, "Accessories_KG": a_kg,
-                        "Unload_Mins": round(dur, 1), "Photo": "Yes" if photo else "No"
+                        "Driver": st.session_state.username,
+                        "Plate": st.session_state.display_plate,
+                        "Customer": active_cust,
+                        "Profiles_KG": p_kg,
+                        "Accessories_KG": a_kg,
+                        "Unload_Mins": round(dur, 1),
+                        "Photo": "Yes" if photo else "No"
                     }])
-                    conn.update(spreadsheet=LOG_URL, worksheet="Transit_Log", data=pd.concat([conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0), new_log], ignore_index=True))
-                    st.success("Το POD συγχρονίστηκε επιτυχώς!")
-                    st.session_state.start_time = None
-                else: st.error("Πατήστε 'Άφιξη' πρώτα!")
+                    
+                    try:
+                        # ΔΙΟΡΘΩΣΗ: Γράφουμε στο κεντρικό Log (Sheet1) και ΟΧΙ στο Transit_Log
+                        current_logs = conn.read(spreadsheet=LOG_URL, worksheet="Sheet1", ttl=0)
+                        updated_logs = pd.concat([current_logs, new_log], ignore_index=True)
+                        conn.update(spreadsheet=LOG_URL, worksheet="Sheet1", data=updated_logs)
+                        
+                        st.success("✅ Το POD συγχρονίστηκε στο κεντρικό Log!")
+                        st.session_state.start_time = None
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Σφάλμα συγχρονισμού: {e}")
+                else:
+                    st.error("⚠️ Πρέπει να πατήσετε 'Άφιξη' πρώτα!")
 
         with tab4:
             tot = user_data['Total KG'].sum()
