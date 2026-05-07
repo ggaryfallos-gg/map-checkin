@@ -338,10 +338,10 @@ if app_mode == "🚛 Driver Terminal":
         #plate_sel = plate_mapping[sel_disp]
         #date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", avail_dates, index=avail_dates.index(st.session_state.filter_date))
 
-        if plate_sel != st.session_state.filter_plate or date_sel != st.session_state.filter_date:
-            st.session_state.filter_plate = plate_sel
-            st.session_state.filter_date = date_sel
-            st.rerun()
+        #if plate_sel != st.session_state.filter_plate or date_sel != st.session_state.filter_date:
+        #    st.session_state.filter_plate = plate_sel
+        #    st.session_state.filter_date = date_sel
+        #    st.rerun()
 
         st.divider()
 
