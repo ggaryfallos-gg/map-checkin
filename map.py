@@ -66,6 +66,15 @@ def gr_num(val, decimals=1):
   s = f"{val:,.{decimals}f}"
   return s.replace(',', 'X').replace('.', ',').replace('X', '.')
 
+# --- SUPPLIERS PICKUPS ---
+def get_supplier_pickups():
+    try:
+        # Διάβασμα από το tab "Supplier_Pickups"
+        df = conn.read(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", ttl=0)
+        return df
+    except:
+        return pd.DataFrame()
+
 # ==========================================
 # 🛑 PUBLIC VIEW: LIVE TRACKING
 # ==========================================
@@ -547,6 +556,26 @@ elif app_mode == "📊 Admin Dashboard":
   st.title("Admin Control Panel")
   logs = conn.read(spreadsheet=LOG_URL, ttl=0)
   st.dataframe(logs.tail(20), use_container_width=True)
+  
+    # --- ΝΕΟ: Φόρμα Καταχώρησης Παραλαβών ---
+    with st.expander("➕ Καταχώρηση Νέας Παραλαβής από Προμηθευτή"):
+        with st.form("new_pickup"):
+            col1, col2 = st.columns(2)
+            s_name = col1.text_input("Όνομα Προμηθευτή")
+            s_addr = col2.text_input("Διεύθυνση & Πόλη")
+            s_area = st.selectbox("Περιοχή", ["Σίνδος", "Καλοχώρι", "Οινόφυτα", "Σχηματάρι", "Ασπρόπυργος"])
+            
+            if st.form_submit_button("Υποβολή"):
+                lat, lon = geocode_address(s_addr, "")
+                # Εδώ μπαίνει η λογική update του GSheet
+                st.success(f"Η παραλαβή από {s_name} καταχωρήθηκε.")
+
+    # --- ΝΕΟ: Assignment Table ---
+    st.subheader("Εκκρεμείς Παραλαβές")
+    pickups_df = get_supplier_pickups()
+    if not pickups_df.empty:
+        pending = pickups_df[pickups_df['Status'] == 'Pending']
+        st.data_editor(pending, key="assign_pickups") # Εδώ ο Admin αλλάζει το Status και την Πινακίδα
 
 
 
