@@ -41,7 +41,7 @@ def load_full_data(_conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_
         df = ship.copy()
         df['Street'], df['Telephone 1'], df['Postal Code'], df['Lat_exact'], df['Lon_exact'] = '', '', '', None, None
 
-    coords = .read(spreadsheet=COORDS_URL, ttl=300)
+    coords = read(spreadsheet=COORDS_URL, ttl=300)
     coords.columns = coords.columns.str.strip()
     coords['City_Match'] = coords['City'].astype(str).str.strip().str.upper()
     coords = coords.rename(columns={'Latitude': 'Lat_city', 'Longitude': 'Lon_city'})
