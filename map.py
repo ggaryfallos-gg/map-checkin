@@ -354,7 +354,7 @@ if app_mode == "🚛 Driver Terminal":
         load_full_data.clear()
         st.toast(f"✅ Αποθηκεύτηκαν μόνιμα {len(new_coords_batch)} νέες διευθύνσεις!")
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🌎 Γενικός Χάρτης", "🛣️ Δρομολόγηση", "📦 POD Protocol", "📊 Analytics", "📩 Ειδοποίηση"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Γενικός Χάρτης", "🛣️ Δρομολόγηση", "📦 POD Protocol", "📊 Analytics", "📩 Ειδοποίηση","🏭 Παραλαβές"])
 
     with tab1:
       st.write("Σημεία εκφόρτωσης:")
@@ -545,6 +545,28 @@ if app_mode == "🚛 Driver Terminal":
             st.success("🏁 Αυτός είναι ο τελευταίος πελάτης.")
       else:
         st.warning("Υπολογίστε το δρομολόγιο στο Tab 2.")
+    # Στο σημείο που ορίζεις τα tabs του οδηγού:
+
+  with tab6:
+    st.subheader("Παραλαβές από Προμηθευτές")
+    all_pickups = get_supplier_pickups()
+    
+    # Φιλτράρισμα μόνο για το συγκεκριμένο φορτηγό
+    my_tasks = all_pickups[(all_pickups['Assigned_Plate'] == st.session_state.user_plate) & 
+                           (all_pickups['Status'] == 'Assigned')]
+    
+    if not my_tasks.empty:
+        for _, p in my_tasks.iterrows():
+            st.warning(f"📍 **{p['Supplier_Name']}** - {p['Address']}")
+            # Κουμπί πλοήγησης
+            gmaps_pickup = f"https://www.google.com/maps/search/?api=1&query={p['Lat']},{p['Lon']}"
+            st.markdown(f"[🗺️ Οδηγίες Πλοήγησης]({gmaps_pickup})")
+            
+            if st.button(f"✅ Ολοκλήρωση Παραλαβής: {p['Supplier_Name']}"):
+                # Logic για αλλαγή status σε 'Collected' στο GSheet
+                st.rerun()
+    else:
+        st.info("Δεν έχετε προγραμματισμένες παραλαβές για σήμερα.")
 
 
 
