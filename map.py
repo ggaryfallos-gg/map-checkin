@@ -395,7 +395,7 @@ if app_mode == "🚛 Driver Terminal":
                 load_full_data.clear()
                 st.toast(f"✅ Αποθηκεύτηκαν {len(new_coords_batch)} διευθύνσεις!")
 
-        #tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD", "📊 Analytics", "📩 Alert", "🏭 Παραλαβές"])    
+       
 
         with tab1:
             st.write("Σημεία εκφόρτωσης:")
