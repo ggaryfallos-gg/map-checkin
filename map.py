@@ -309,14 +309,7 @@ if app_mode == "🚛 Driver Terminal":
 
     # Γ. Κυρίως Terminal (Tabs) - Εμφανίζεται ΜΟΝΟ αν st.session_state.inspected == True
     else:
-        st.subheader(f"🚚 {st.session_state.display_plate} | {st.session_state.loading_date}")
         
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-            "🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD Protocol", 
-            "📊 Analytics", "📩 Alert", "🏭 Παραλαβές"
-        ])
-        
-        # ... (Εδώ συνεχίζει ο κώδικας των Tabs όπως τον είχαμε)
     
     if st.session_state.user_plate is None:
         st.title("Επιλογή Δρομολογίου")
