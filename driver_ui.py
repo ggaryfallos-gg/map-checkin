@@ -1,0 +1,437 @@
+import streamlit as st
+import pandas as pd
+import folium
+from streamlit_folium import st_folium
+from datetime import datetime
+import time
+from utils import gr_num, get_osrm_data
+
+
+def render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME):
+# ==========================================
+# 🚛 1. DRIVER TERMINAL
+# ==========================================
+if app_mode == "🚛 Driver Terminal":
+    
+    # 1. ΕΛΕΓΧΟΣ: Αν δεν έχει επιλεγεί ακόμα φορτηγό
+    if st.session_state.user_plate is None:
+        st.title("Επιλογή Δρομολογίου")
+        
+        #col1, col2 = st.columns(2)
+        ## Καθαρισμός λίστας πινακίδων για να μην έχουμε σφάλματα
+        #raw_p = all_data['Truck License Plate'].dropna().unique().tolist()
+        #plate_options = sorted([str(p) for p in raw_p])
+        
+        #plate_sel = col1.selectbox("🚚 Επιλέξτε Φορτηγό", plate_options, key="unique_plate_sel")
+        
+        ## Φιλτράρισμα ημερομηνιών βάσει πινακίδας
+        #dates_avail = all_data[all_data['Truck License Plate'] == plate_sel]['Loading_Date'].unique()
+        #date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", dates_avail, key="unique_date_sel")
+        
+        #if st.button("🚀 Έναρξη Βάρδιας", type="primary", use_container_width=True):
+        #    st.session_state.user_plate = plate_sel.replace(' ', '').upper()
+        #    st.session_state.display_plate = plate_sel
+        #    st.session_state.loading_date = date_sel
+        #    st.session_state.is_logged_in = True
+        #    st.rerun()
+
+    # 2. ΕΛΕΓΧΟΣ: Αν επιλέχθηκε φορτηγό ΑΛΛΑ δεν έγινε ακόμα το Inspection
+    elif not st.session_state.inspected:
+        st.header("🛡️ Daily Safety Inspection")
+        st.info(f"Όχημα: {st.session_state.display_plate}")
+        
+        with st.container(border=True):
+            c1 = st.checkbox("🛞 Ελαστικά", key="check_1")
+            c2 = st.checkbox("🛢️ Λάδια / Ψυκτικό", key="check_2")
+            c3 = st.checkbox("📂 Έγγραφα", key="check_3")
+            c4 = st.checkbox("💧 AdBlue", key="check_4")
+            
+            issues = st.text_area("Παρατηρήσεις", key="issues_area")
+            
+            if st.button("🏁 Ολοκλήρωση & Εκκίνηση", type="primary"):
+                if c1 and c2 and c3 and c4:
+                    try:
+                        # 1. Δημιουργία του Log entry
+                        new_entry = pd.DataFrame([{
+                            "Timestamp": datetime.now(GR_TIME).strftime('%Y-%m-%d %H:%M:%S'),
+                            "Driver": st.session_state.username,
+                            "Plate": st.session_state.display_plate,
+                            "Tires": "OK", 
+                            "Oil_Coolant": "OK", 
+                            "Documents": "OK", 
+                            "AdBlue": "OK",
+                            "Comments": issues
+                        }])
+
+                        # 2. Ανάγνωση του υπάρχοντος Maintenance_Log
+                        # Βεβαιώσου ότι το worksheet "Maintenance_Log" υπάρχει στο Excel σου
+                        current_m_log = conn.read(spreadsheet=LOG_URL, worksheet="Maintenance_Log", ttl=0)
+                        
+                        # 3. Προσθήκη της νέας γραμμής
+                        updated_m_log = pd.concat([current_m_log, new_entry], ignore_index=True)
+                        
+                        # 4. Ενημέρωση του Google Sheets
+                        conn.update(spreadsheet=LOG_URL, worksheet="Maintenance_Log", data=updated_m_log)
+                        
+                        # 5. Αλλαγή state και rerun
+                        st.session_state.inspected = True
+                        st.success("✅ Η επιθεώρηση καταγράφηκε επιτυχώς!")
+                        time.sleep(1)
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Αποτυχία εγγραφής στο Excel: {e}")
+                else:
+                    st.error("⚠️ Πρέπει να επιλέξετε όλα τα πεδία για να συνεχίσετε.")
+        st.stop()
+
+    # 3. ΚΥΡΙΩΣ TERMINAL: Εμφανίζεται μόνο αν έχουν περάσει τα παραπάνω
+    else:
+        st.subheader(f"🚚 {st.session_state.display_plate} | {st.session_state.loading_date}")
+        #tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD", "📊 Analytics", "📩 Alert", "🏭 Παραλαβές"])
+       
+        
+    
+    if st.session_state.user_plate is None:
+        #st.title("Επιλογή Δρομολογίου")
+        
+        if st.session_state.filter_plate != "Όλα":
+            dates_raw = fleet_info[fleet_info['Truck License Plate'] == st.session_state.filter_plate]['Loading_Date'].dropna().astype(str).unique()
+        else:
+            dates_raw = fleet_info['Loading_Date'].dropna().astype(str).unique()
+        avail_dates = ["Όλες"] + sorted(dates_raw.tolist())
+        if st.session_state.filter_date not in avail_dates: st.session_state.filter_date = "Όλες"
+
+        if st.session_state.filter_date != "Όλες":
+            plates_raw = fleet_info[fleet_info['Loading_Date'] == st.session_state.filter_date]['Truck License Plate'].dropna().astype(str).unique()
+        else:
+            plates_raw = fleet_info['Truck License Plate'].dropna().astype(str).unique()
+        
+        plate_options = ["Όλα"]
+        plate_mapping = {"Όλα": "Όλα"}
+        clean_to_display = {"Όλα": "Όλα"}
+
+        for p in sorted(plates_raw.tolist()):
+            if st.session_state.filter_date != "Όλες":
+                dests = fleet_info[(fleet_info['Truck License Plate'] == p) & (fleet_info['Loading_Date'] == st.session_state.filter_date)]['Dests'].sum()
+            else:
+                dests = fleet_info[fleet_info['Truck License Plate'] == p]['Dests'].sum()
+            
+            disp = f"{p} ({int(dests)} Στάσεις)"
+            plate_options.append(disp)
+            plate_mapping[disp] = p
+            clean_to_display[p] = disp
+
+        if st.session_state.filter_plate not in clean_to_display: st.session_state.filter_plate = "Όλα"
+
+        col1, col2 = st.columns(2)
+        sel_disp = col1.selectbox("🚚 Επιλέξτε Φορτηγό", plate_options, index=plate_options.index(clean_to_display[st.session_state.filter_plate]))
+        plate_sel = plate_mapping[sel_disp]
+        date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", avail_dates, index=avail_dates.index(st.session_state.filter_date))
+
+        if plate_sel != st.session_state.filter_plate or date_sel != st.session_state.filter_date:
+            st.session_state.filter_plate = plate_sel
+            st.session_state.filter_date = date_sel
+            st.rerun()
+
+        st.divider()
+
+        if plate_sel != "Όλα" and date_sel != "Όλες":
+            selected_route = fleet_info[(fleet_info['Truck License Plate'] == plate_sel) & (fleet_info['Loading_Date'] == date_sel)].iloc[0]
+            st.success(f"✅ Επιτυχής Επιλογή! Μπορείτε να ξεκινήσετε.")
+            
+            if st.button("🚀 Έναρξη Βάρδιας", type="primary", use_container_width=True):
+                st.session_state.user_plate = selected_route['Plate_Clean']
+                st.session_state.loading_date = selected_route['Loading_Date']
+                st.session_state.display_plate = selected_route['Truck License Plate']
+                st.session_state.inspected = False
+                st.rerun()
+        else:
+            st.info("ℹ️ Παρακαλώ επιλέξτε **Φορτηγό** και **Ημερομηνία**.")
+
+    else:
+        #st.subheader(f"🚚 {st.session_state.display_plate} (Φόρτωση: {st.session_state.loading_date})")
+        
+        user_data = all_data[(all_data['Plate_Clean'] == st.session_state.user_plate) & (all_data['Loading_Date'] == st.session_state.loading_date)].copy()
+        gps = get_geolocation()
+        curr_loc = (gps['coords']['latitude'], gps['coords']['longitude']) if gps and 'coords' in gps else (41.0, 22.8)
+        if gps and 'coords' in gps:
+            st.session_state.last_lat = gps['coords']['latitude']
+            st.session_state.last_lon = gps['coords']['longitude']
+
+        new_coords_batch = []
+        for idx, row in user_data.iterrows():
+            street = str(row.get('Street', ''))
+            city = str(row.get('City_x', ''))
+            user_data.at[idx, 'Display_Address'] = f"{street}, {city}" if street and street.lower() not in ['nan', 'none'] else city
+
+            if pd.isna(row.get('Lat_exact')) and street and street.lower() not in ['nan', 'none']:
+                lat, lon = geocode_address(street, city)
+                if lat and lon:
+                    user_data.at[idx, 'Final_Lat'] = lat
+                    user_data.at[idx, 'Final_Lon'] = lon
+                    user_data.at[idx, 'Lat_exact'] = lat
+                    new_coords_batch.append({'Name': row['Name'], 'Latitude': lat, 'Longitude': lon})
+
+        if new_coords_batch:
+            with st.spinner("Αποθήκευση συντεταγμένων..."):
+                fresh_cus = conn.read(spreadsheet=CUSADDRESS_URL, ttl=0)
+                fresh_cus.columns = fresh_cus.columns.str.strip()
+                if 'Latitude' not in fresh_cus.columns: fresh_cus['Latitude'] = ''
+                if 'Longitude' not in fresh_cus.columns: fresh_cus['Longitude'] = ''
+                
+                for update in new_coords_batch:
+                    mask = fresh_cus['Name'] == update['Name']
+                    if mask.any():
+                        fresh_cus.loc[mask, 'Latitude'] = update['Latitude']
+                        fresh_cus.loc[mask, 'Longitude'] = update['Longitude']
+                
+                conn.update(spreadsheet=CUSADDRESS_URL, data=fresh_cus)
+                load_full_data.clear()
+                st.toast(f"✅ Αποθηκεύτηκαν {len(new_coords_batch)} διευθύνσεις!")
+
+       
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD", "📊 Analytics", "📩 Alert", "🏭 Παραλαβές"])
+        with tab1:
+            st.write("Σημεία εκφόρτωσης:")
+            m1 = folium.Map(location=curr_loc, zoom_start=7)
+            folium.Marker(curr_loc, popup="Η θέση μου", icon=folium.Icon(color='green', icon='truck', prefix='fa')).add_to(m1)
+            
+            for _, r in user_data.drop_duplicates(subset=['Name']).iterrows():
+                if pd.notna(r['Final_Lat']):
+                    phone_raw = str(r.get('Telephone 1', ''))
+                    tel_html = f"<br><br><a href='tel:{''.join(c for c in phone_raw if c.isdigit() or c == '+')}' style='background-color:#28a745; color:white; padding:6px 12px; text-decoration:none; border-radius:5px; display:inline-block; font-weight:bold;'>📞 Κλήση: {phone_raw}</a>" if phone_raw and phone_raw.lower() not in ['nan', 'none', ''] else ""
+                    kg_info = f"<br>📦 Φορτίο: {gr_num(r.get('Total KG', 0), 1)} KG"
+                    popup_content = f"<b>{r['Name']}</b><br>{r.get('Display_Address', '')}{kg_info}{tel_html}"
+                    
+                    folium.Marker(
+                        [r['Final_Lat'], r['Final_Lon']],
+                        popup=popup_content, 
+                        tooltip=f"{r['Name']}",
+                        icon=folium.Icon(color='blue', icon='info-sign')
+                    ).add_to(m1)
+            st_folium(m1, width="100%", height=500, key="all_points_map")
+
+        with tab2:
+            st.subheader("Σχεδιασμός & Βελτιστοποίηση")
+            
+            if st.button("1. Αυτόματη Πρόταση Σειράς (OSRM)", use_container_width=True):
+                stops = user_data.drop_duplicates('Name').dropna(subset=['Final_Lat'])
+                pts, seq_list = [curr_loc], []
+                unvisited = stops.copy()
+                
+                while not unvisited.empty:
+                    unvisited['d'] = unvisited.apply(lambda r: geodesic(pts[-1], (r['Final_Lat'], r['Final_Lon'])).km, axis=1)
+                    idx = unvisited['d'].idxmin()
+                    row = unvisited.loc[idx]
+                    pts.append((row['Final_Lat'], row['Final_Lon']))
+                    un_time = (row['Total KG'] / 1000) * 10
+                    seq_list.append({
+                        'name': row['Name'], 'address': row['Display_Address'], 'telephone': str(row.get('Telephone 1', '')),
+                        'kg': row['Total KG'], 'unload': un_time, 'coords': (row['Final_Lat'], row['Final_Lon'])
+                    })
+                    unvisited = unvisited.drop(index=idx)
+                
+                draft_df = pd.DataFrame([{
+                    'Name': s['name'], 'Address': s.get('address', ''), 'Telephone': s.get('telephone', ''),
+                    'KG': s['kg'], 'Latitude': s['coords'][0], 'Longitude': s['coords'][1]
+                } for s in seq_list])
+                draft_df.insert(0, 'Σειρά', range(1, len(draft_df) + 1))
+                st.session_state.draft_sequence = draft_df
+
+                for i in range(len(seq_list)):
+                    _, _, d_min = get_osrm_data([pts[i], pts[i+1]])
+                    seq_list[i]['drive_to'] = d_min
+                st.session_state.route_data = seq_list
+                geom, _, _ = get_osrm_data(pts)
+                st.session_state.route_geom = geom
+                st.rerun()
+
+            if st.session_state.draft_sequence is not None:
+                st.info("💡 **Διπλό κλικ στη στήλη 'Σειρά'** για αλλαγή της σειράς.")
+                edited_seq = st.data_editor(st.session_state.draft_sequence, hide_index=True, use_container_width=True, disabled=['Name', 'Address', 'Telephone', 'KG', 'Latitude', 'Longitude'])
+                
+                if st.button("2. Εφαρμογή & Υπολογισμός", type="primary", use_container_width=True):
+                    edited_seq = edited_seq.sort_values(by='Σειρά')
+                    pts, final_seq = [curr_loc], []
+                    for _, row in edited_seq.iterrows():
+                        pts.append((row['Latitude'], row['Longitude']))
+                        un_time = (row['KG'] / 1000) * 10
+                        final_seq.append({
+                            'name': row['Name'], 'address': row['Address'], 'telephone': row.get('Telephone', ''),
+                            'kg': row['KG'], 'unload': un_time, 'coords': (row['Latitude'], row['Longitude'])
+                        })
+                    
+                    for i in range(len(final_seq)):
+                        _, _, d_min = get_osrm_data([pts[i], pts[i+1]])
+                        final_seq[i]['drive_to'] = d_min
+                    
+                    st.session_state.route_data = final_seq
+                    geom, _, _ = get_osrm_data(pts)
+                    st.session_state.route_geom = geom
+                    st.rerun()
+
+            if st.session_state.route_data:
+                st.divider()
+                st.write("**Τελικό Δρομολόγιο:**")
+                for i, s in enumerate(st.session_state.route_data):
+                    addr_display = s.get('address', 'Άγνωστη Διεύθυνση')
+                    lat, lon = s['coords'][0], s['coords'][1]
+                    
+                    gmaps_url = f"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}"
+                    waze_url = f"https://waze.com/ul?ll={lat},{lon}&navigate=yes"
+                    nav_html = f"  <a href='{gmaps_url}' target='_blank' style='text-decoration:none;font-size:16px;'>🗺️ G-Maps</a>  |  <a href='{waze_url}' target='_blank' style='text-decoration:none;font-size:16px;'>🧭 Waze</a>"
+                    
+                    st.markdown(f"**{i+1}. {s['name']}** ({addr_display}): 🚛 ~{int(s.get('drive_to', 0))}' | 🏗️ ~{int(s.get('unload', 0))}' (Φορτίο: {gr_num(s['kg'], 0)} KG){nav_html}", unsafe_allow_html=True)
+                
+                m2 = folium.Map(location=curr_loc, zoom_start=7)
+                folium.Marker(curr_loc, popup="Αφετηρία", icon=folium.Icon(color='green', icon='play')).add_to(m2)
+
+                if st.session_state.route_geom:
+                    folium.PolyLine([[l, lon] for lon, l in st.session_state.route_geom], color="#007bff", weight=5).add_to(m2)
+                    for i, s in enumerate(st.session_state.route_data):
+                        seq_num = i + 1
+                        phone_raw = str(s.get('telephone', ''))
+                        tel_html = f"<br><br><a href='tel:{''.join(c for c in phone_raw if c.isdigit() or c == '+')}' style='background-color:#28a745; color:white; padding:6px 12px; text-decoration:none; border-radius:5px; display:inline-block; font-weight:bold;'>📞 Κλήση: {phone_raw}</a>" if phone_raw and phone_raw.lower() not in ['nan', 'none', ''] else ""
+                        kg_info = f"<br>📦 Φορτίο: {gr_num(s.get('kg', 0), 1)} KG"
+                        popup_content = f"<b>Στάση {seq_num}: {s['name']}</b><br>{s.get('address', '')}{kg_info}{tel_html}"
+                        
+                        pin_html = f'''<div style="background-color:#E3000F; color:white; border-radius:50%; width:28px; height:28px; display:flex; justify-content:center; align-items:center; font-weight:bold; border:2px solid white; box-shadow: 0px 2px 4px rgba(0,0,0,0.4); font-size:13px;">{seq_num}</div>'''
+                        folium.Marker(
+                            [s['coords'][0], s['coords'][1]],
+                            popup=folium.Popup(popup_content, max_width=300),
+                            tooltip=f"{seq_num}. {s['name']}",
+                            icon=folium.DivIcon(html=pin_html, icon_size=(28, 28), icon_anchor=(14, 14))
+                        ).add_to(m2)
+                
+                st_folium(m2, width="100%", height=450, key=f"routing_map_{hash(str(st.session_state.route_data))}")
+
+        with tab3:
+            st.subheader("📦 POD Protocol")
+            custList = [s['name'] for s in st.session_state.route_data] if st.session_state.route_data else sorted(user_data['Name'].unique())
+            active_cust = st.selectbox("Επιλογή Πελάτη", custList, key="pod_cust_sel")
+            cust_rows = user_data[user_data['Name'] == active_cust]
+            
+            use_cam = st.checkbox("📸 Ενεργοποίηση Κάμερας", key="pod_cam_toggle")
+            photo = st.camera_input("Λήψη Φωτογραφίας") if use_cam else None
+            
+            c1, c2 = st.columns(2)
+            if c1.button("▶️ Άφιξη", use_container_width=True, key="btn_arrival"):
+                st.session_state.start_time = datetime.now(GR_TIME)
+                st.success(f"Καταγράφηκε άφιξη: {st.session_state.start_time.strftime('%H:%M')}")
+
+            if c2.button("⏹️ Sync POD", type="primary", use_container_width=True, key="btn_sync_pod"):
+                if st.session_state.start_time:
+                    dur = (datetime.now(GR_TIME) - st.session_state.start_time).total_seconds() / 60
+                    p_kg = cust_rows[['Unpainted', 'White', 'Colored']].sum().sum()
+                    a_kg = cust_rows['Accessories'].sum()
+                    # Λήψη τρέχουσας τοποθεσίας από το session_state
+                    # Αν δεν υπάρχει (π.χ. δεν πρόλαβε να κάνει load), βάζουμε 0.0
+                    curr_lat = st.session_state.get('last_lat', 0.0)
+                    curr_lon = st.session_state.get('last_lon', 0.0)
+                    
+                    new_log = pd.DataFrame([{
+                        "Timestamp": datetime.now(GR_TIME).strftime('%Y-%m-%d %H:%M:%S'),
+                        "Driver": st.session_state.username,
+                        "Plate": st.session_state.display_plate,
+                        "Customer": active_cust,
+                        "Profiles_KG": p_kg,
+                        "Accessories_KG": a_kg,
+                        "Unload_Mins": round(dur, 1),
+                        "Photo": "Yes" if photo else "No",
+                        "Checkin_Lat": curr_lat,  # <--- ΠΡΟΣΘΗΚΗ
+                        "Checkin_Lon": curr_lon   # <--- ΠΡΟΣΘΗΚΗ
+                    }])
+                    
+                    try:
+                        # ΔΙΟΡΘΩΣΗ: Γράφουμε στο κεντρικό Log (Sheet1) και ΟΧΙ στο Transit_Log
+                        current_logs = conn.read(spreadsheet=LOG_URL, worksheet="Log", ttl=0)
+                        updated_logs = pd.concat([current_logs, new_log], ignore_index=True)
+                        conn.update(spreadsheet=LOG_URL, worksheet="Log", data=updated_logs)
+                        
+                        st.success("✅ Το POD συγχρονίστηκε στο κεντρικό Log!")
+                        st.session_state.start_time = None
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Σφάλμα συγχρονισμού: {e}")
+                else:
+                    st.error("⚠️ Πρέπει να πατήσετε 'Άφιξη' πρώτα!")
+
+        with tab4:
+            tot = user_data['Total KG'].sum()
+            prof = user_data[['Unpainted', 'White', 'Colored']].sum().sum()
+            acc = user_data['Accessories'].sum()
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Σύνολο", f"{gr_num(tot, 1)} KG")
+            c2.metric("Προφίλ", f"{gr_num(prof, 1)} KG")
+            c3.metric("Εξαρτήματα", f"{gr_num(acc, 1)} KG")
+            st.progress(min(tot/24000, 1.0))
+            st.caption(f"Load Factor: {gr_num((tot/24000)*100, 1)}%")
+
+        with tab5:
+            st.subheader("📩 Ειδοποίηση & Live Tracking")
+            if st.session_state.route_data:
+                names = [s['name'] for s in st.session_state.route_data]
+                if active_cust in names:
+                    idx = names.index(active_cust)
+                    if idx < len(st.session_state.route_data) - 1:
+                        nxt_cust = st.session_state.route_data[idx+1]
+                        nxt_name = nxt_cust['name']
+                        
+                        nxt_rows = user_data[user_data['Name'] == nxt_name]
+                        nxt_prof = nxt_rows[['Unpainted', 'White', 'Colored']].sum().sum()
+                        nxt_acc = nxt_rows['Accessories'].sum()
+                        nxt_tot = nxt_cust.get('kg', 0)
+                        
+                        curr_unload = next(s.get('unload', 0) for s in st.session_state.route_data if s['name'] == active_cust)
+                        total_wait = int(curr_unload + nxt_cust.get('drive_to', 0))
+                        
+                        base_url = "https://map-checkin-wmw4nmixyyu8mgfrnhmusm.streamlit.app/"
+                        tracking_url = f"{base_url}?track={st.session_state.user_plate}"
+                        
+                        subject = f"Αναμενόμενη Παράδοση Alumil - {nxt_name}"
+                        body_ui = f"""Αγαπητέ συνεργάτη ({nxt_name}),\n\nΗ εκφόρτωση στον προηγούμενο σταθμό βρίσκεται σε εξέλιξη. Η εκτιμώμενη άφιξη στις εγκαταστάσεις σας είναι σε περίπου **{total_wait} λεπτά**.\n\n📦 **Στοιχεία Παράδοσης:**\n* Προφίλ: {gr_num(nxt_prof, 1)} KG\n* Εξαρτήματα: {gr_num(nxt_acc, 1)} KG\n* **Σύνολο: {gr_num(nxt_tot, 1)} KG**\n\n🚚 Όχημα: {st.session_state.display_plate}\n\n📍 **Live Tracking:** Δείτε το φορτηγό ζωντανά εδώ: {tracking_url}"""
+                        st.info(body_ui)
+                        
+                        body_mail = f"Αγαπητέ συνεργάτη ({nxt_name}),\n\nΗ εκφόρτωση στον προηγούμενο σταθμό βρίσκεται σε εξέλιξη. Η εκτιμώμενη άφιξη στις εγκαταστάσεις σας είναι σε περίπου {total_wait} λεπτά.\n\nΣτοιχεία Παράδοσης:\n- Προφίλ: {gr_num(nxt_prof, 1)} KG\n- Εξαρτήματα: {gr_num(nxt_acc, 1)} KG\n- Σύνολο: {gr_num(nxt_tot, 1)} KG\n\nΌχημα: {st.session_state.display_plate}\n\nLive Tracking: Μπορείτε να παρακολουθήσετε την πορεία του φορτηγού ζωντανά μέσω του παρακάτω συνδέσμου:\n{tracking_url}\n\nΕυχαριστούμε για τη συνεργασία."
+                        link = f"mailto:?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body_mail)}"
+                        st.markdown(f'<a href="{link}" target="_blank" style="padding:15px; background-color:#007bff; color:white; border-radius:8px; text-decoration:none;">📧 Email Ειδοποίησης & Tracking</a>', unsafe_allow_html=True)
+                    else:
+                        st.success("🏁 Αυτός είναι ο τελευταίος πελάτης.")
+            else:
+                st.warning("Υπολογίστε το δρομολόγιο στο Tab 2.")
+
+        with tab6:
+            st.subheader("📦 Παραλαβές από Προμηθευτές")
+            all_pickups = get_supplier_pickups()
+            
+            if not all_pickups.empty:
+                # Συγκρίνουμε χωρίς κενά και με κεφαλαία
+                all_pickups['Plate_Clean'] = all_pickups['Assigned_Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
+                my_plate_clean = st.session_state.display_plate.replace(' ', '').upper()
+                
+                my_tasks = all_pickups[(all_pickups['Plate_Clean'] == my_plate_clean) & (all_pickups['Status'] == 'Assigned')]
+                
+                if not my_tasks.empty:
+                    for idx, p in my_tasks.iterrows():
+                        with st.container(border=True):
+                            st.warning(f"📍 **{p['Supplier_Name']}**")
+                            st.write(f"🏠 {p['Address']} | 📅 {p['Date']}")
+                            gmaps_pickup = f"https://www.google.com/maps/search/?api=1&query={p['Lat']},{p['Lon']}"
+                            
+                            c1, c2 = st.columns(2)
+                            c1.markdown(f"[🗺️ Οδηγίες Πλοήγησης]({gmaps_pickup})")
+                            
+                            if c2.button(f"✅ Ολοκλήρωση", key=f"btn_p_{idx}"):
+                                all_pickups.at[idx, 'Status'] = 'Collected'
+                                # Πετάμε την προσωρινή στήλη Plate_Clean πριν την αποθήκευση
+                                df_to_save = all_pickups.drop(columns=['Plate_Clean'])
+                                conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=df_to_save.fillna(""))
+                                st.success("Καταγράφηκε!")
+                                time.sleep(1)
+                                st.rerun()
+                else:
+                    st.info("Δεν έχετε προγραμματισμένες παραλαβές.")
+            else:
+                st.info("Το αρχείο παραλαβών είναι άδειο.")
