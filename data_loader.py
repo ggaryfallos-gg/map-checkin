@@ -5,7 +5,7 @@ from utils import clean_val
 # --- DATA PIPELINE ---
 @st.cache_data(ttl=300, show_spinner="Φόρτωση δεδομένων από Google Sheets...")
 def load_full_data():
-    ship = conn.read(spreadsheet=SHIPMENTS_URL, ttl=300)
+    ship = _conn.read(spreadsheet=SHIPMENTS_URL, ttl=300)
     ship.columns = ship.columns.str.strip()
     ship['Plate_Clean'] = ship['Truck License Plate'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
     ship['City_Clean'] = ship['City'].astype(str).str.strip().str.upper()
