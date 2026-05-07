@@ -257,7 +257,7 @@ if st.sidebar.button("🚪 Logout"):
   st.session_state.password_correct = False
   reset_shift()
   st.rerun()
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Γενικός Χάρτης", "🛣️ Δρομολόγηση", "📦 POD Protocol", "📊 Analytics", "📩 Ειδοποίηση","🏭 Παραλαβές"])
+
 
 # --- 1. DRIVER TERMINAL ---
 if app_mode == "🚛 Driver Terminal":
@@ -355,7 +355,7 @@ if app_mode == "🚛 Driver Terminal":
         load_full_data.clear()
         st.toast(f"✅ Αποθηκεύτηκαν μόνιμα {len(new_coords_batch)} νέες διευθύνσεις!")
 
-    
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Γενικός Χάρτης", "🛣️ Δρομολόγηση", "📦 POD Protocol", "📊 Analytics", "📩 Ειδοποίηση","🏭 Παραλαβές"])    
 
     with tab1:
       st.write("Σημεία εκφόρτωσης:")
