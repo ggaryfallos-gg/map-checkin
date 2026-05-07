@@ -698,7 +698,7 @@ elif app_mode == "📊 Admin Dashboard":
             else:
                 st.info("Δεν υπάρχουν εκκρεμείς παραλαβές.")
             
-    except Exception as ex:
+        except Exception as ex:
         st.error(f"Σφάλμα: {ex}")
     # --- TAB 3: GPS LOGS ---
     with admin_tab3:
