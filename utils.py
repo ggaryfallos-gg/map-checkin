@@ -39,7 +39,9 @@ def clean_val(v):
     if not v_str or v_str.lower() in ['nan', 'none', '']: return 0.0
     if ',' in v_str: v_str = v_str.replace('.', '').replace(',', '.')
     try: return float(v_str)
-    except: return 0.0
+    except ValueError:
+        # Αν δεν είναι αριθμός (π.χ. είναι πινακίδα 'KIE 6761'), επέστρεψε 0.0 ή το string
+        return 0.0
 
 def gr_num(val, decimals=1):
     s = f"{val:,.{decimals}f}"
