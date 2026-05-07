@@ -43,10 +43,13 @@ def gr_num(val, decimals=1):
     s = f"{val:,.{decimals}f}"
     return s.replace(',', 'X').replace('.', ',').replace('X', '.')
 
-@st.cache_data(ttl=10)
 def get_supplier_pickups():
     try:
         df = conn.read(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", ttl=10)
         return df
     except:
         return pd.DataFrame()
+
+@st.cache_data(ttl=600)
+def get_cached_geodesic(p1, p2):
+    return geodesic(p1, p2).km
