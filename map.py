@@ -629,60 +629,69 @@ elif app_mode == "📊 Admin Dashboard":
 
   # --- ΤΜΗΜΑ 2: ΔΙΑΧΕΙΡΙΣΗ & ΑΝΑΘΕΣΗ ΠΑΡΑΛΑΒΩΝ ---
   st.subheader("📋 Προγραμματισμός & Ανάθεση σε Φορτηγά")
-  
-  try:
-      pickups_df = conn.read(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", ttl=0)
-      
-      if not pickups_df.empty:
-          # Φέρνουμε τις πινακίδες για το dropdown
-          try:
-              transit_data = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
-              available_plates = sorted(transit_data['Plate'].unique().tolist())
-          except:
-              available_plates = []
-
-          # Επεξεργασία πίνακα
-          edited_df = st.data_editor(
-              pickups_df,
-              column_config={
-                  "Date": st.column_config.TextColumn("Ημερομηνία", disabled=True),
-                  "Supplier_Name": st.column_config.TextColumn("Προμηθευτής", disabled=True),
-                  "Area": st.column_config.TextColumn("Περιοχή", disabled=True),
-                  "Status": st.column_config.SelectboxColumn(
-                      "Κατάσταση",
-                      options=["Pending", "Assigned", "Collected"],
-                      required=True
-                  ),
-                  "Assigned_Plate": st.column_config.SelectboxColumn(
-                      "Ανάθεση σε Πινακίδα",
-                      options=available_plates,
-                      help="Επιλέξτε το φορτηγό που θα εκτελέσει την παραλαβή"
-                  ),
-                  "ID": None, "Lat": None, "Lon": None, "Address": None # Κρύβουμε τεχνικές στήλες
-              },
-              hide_index=True,
-              use_container_width=True,
-              key="pickup_manager"
-          )
-
-          if st.button("💾 Αποθήκευση Αλλαγών Ανάθεσης", type="primary"):
-              try:
-                  # Καθαρίζουμε το DataFrame από τυχόν NaN τιμές που "χτυπάνε" στο API της Google
-                  df_to_save = edited_df.fillna("")
+    
+    try:
+        # Διάβασμα των παραλαβών
+        pickups_df = conn.read(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", ttl=0)
         
-                  # Μετατροπή όλων των στηλών σε string/numeric για να μην μπερδεύεται το API
-                  df_to_save['Assigned_Plate'] = df_to_save['Assigned_Plate'].astype(str)
-                  df_to_save['Status'] = df_to_save['Status'].astype(str)
-                  conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=edited_df)
-                  st.success("Οι αλλαγές αποθηκεύτηκαν!")
-                  time.sleep(1)
-                  st.rerun()
-              except Exception as e:
-                                    st.error(f"❌ Σφάλμα API: Βεβαιωθείτε ότι το Sheet είναι Shared με δικαιώματα Editor. Λεπτομέρειες: {e}")
-          else:
-              st.info("Δεν υπάρχουν εκκρεμείς παραλαβές στο σύστημα.")
+        if not pickups_df.empty:
+            # Λήψη πινακίδων (χρησιμοποιούμε το all_data για πληρότητα αν υπάρχει)
+            try:
+                available_plates = sorted(all_data['Truck License Plate'].unique().tolist())
+            except:
+                try:
+                    transit_data = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
+                    available_plates = sorted(transit_data['Plate'].unique().tolist())
+                except:
+                    available_plates = []
+
+            # Επεξεργασία πίνακα
+            edited_df = st.data_editor(
+                pickups_df,
+                column_config={
+                    "Date": st.column_config.TextColumn("Ημερομηνία", disabled=True),
+                    "Supplier_Name": st.column_config.TextColumn("Προμηθευτής", disabled=True),
+                    "Area": st.column_config.TextColumn("Περιοχή", disabled=True),
+                    "Status": st.column_config.SelectboxColumn(
+                        "Κατάσταση",
+                        options=["Pending", "Assigned", "Collected"],
+                        required=True
+                    ),
+                    "Assigned_Plate": st.column_config.SelectboxColumn(
+                        "Ανάθεση σε Πινακίδα",
+                        options=available_plates,
+                        help="Επιλέξτε το φορτηγό για την παραλαβή"
+                    ),
+                    "ID": None, "Lat": None, "Lon": None, "Address": None
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="pickup_manager_final"
+            )
+
+            if st.button("💾 Αποθήκευση Αλλαγών Ανάθεσης", type="primary"):
+                try:
+                    # 1. Καθαρισμός δεδομένων (NaN -> empty string)
+                    df_to_save = edited_df.fillna("")
+                    
+                    # 2. Force types για αποφυγή API errors
+                    df_to_save['Assigned_Plate'] = df_to_save['Assigned_Plate'].astype(str)
+                    df_to_save['Status'] = df_to_save['Status'].astype(str)
+                    
+                    # 3. Ενημέρωση (Χρησιμοποιούμε το df_to_save!)
+                    conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=df_to_save)
+                    
+                    st.success("✅ Οι αλλαγές αποθηκεύτηκαν!")
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Σφάλμα API: Ελέγξτε τα δικαιώματα Editor. {e}")
+        else:
+            st.info("Δεν υπάρχουν εκκρεμείς παραλαβές στο σύστημα.")
+            
     except Exception as ex:
-      st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {e}")
+        # Διόρθωση: χρησιμοποιούμε το 'ex' που ορίσαμε στο except
+        st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {ex}")
 
 
 
