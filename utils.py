@@ -5,6 +5,7 @@ import urllib.parse
 import time
 from geopy.distance import geodesic
 
+@st.cache_data(ttl=86400)
 def geocode_address(street, city):
     if not street or str(street).lower() in ['nan', 'none', '']: return None, None
     street_clean = str(street).split(',')[0].strip()
@@ -18,7 +19,8 @@ def geocode_address(street, city):
             time.sleep(0.3)
         except: pass
     return None, None
-
+    
+@st.cache_data(ttl=3600)
 def get_osrm_data(coords):
     if not coords or len(coords) < 2: return None, 0, 0
     locs = ";".join([f"{lon},{lat}" for lat, lon in coords])
@@ -43,12 +45,13 @@ def gr_num(val, decimals=1):
     s = f"{val:,.{decimals}f}"
     return s.replace(',', 'X').replace('.', ',').replace('X', '.')
 
+@st.cache_data(ttl=60)
 def get_supplier_pickups():
     try:
         df = conn.read(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", ttl=10)
         return df
     except:
         return pd.DataFrame()
-
+@st.cache_data(ttl=600)
 def get_cached_geodesic(p1, p2):
     return geodesic(p1, p2).km
