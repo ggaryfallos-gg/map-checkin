@@ -260,11 +260,11 @@ if app_mode == "🚛 Driver Terminal":
         raw_p = all_data['Truck License Plate'].dropna().unique().tolist()
         plate_options = sorted([str(p) for p in raw_p])
         
-        plate_sel = col1.selectbox("🚚 Επιλέξτε Φορτηγό", plate_options, key="unique_plate_sel")
+        #plate_sel = col1.selectbox("🚚 Επιλέξτε Φορτηγό", plate_options, key="unique_plate_sel")
         
         # Φιλτράρισμα ημερομηνιών βάσει πινακίδας
-        dates_avail = all_data[all_data['Truck License Plate'] == plate_sel]['Loading_Date'].unique()
-        date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", dates_avail, key="unique_date_sel")
+        #dates_avail = all_data[all_data['Truck License Plate'] == plate_sel]['Loading_Date'].unique()
+        #date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", dates_avail, key="unique_date_sel")
         
         if st.button("🚀 Έναρξη Βάρδιας", type="primary", use_container_width=True):
             st.session_state.user_plate = plate_sel.replace(' ', '').upper()
@@ -333,15 +333,15 @@ if app_mode == "🚛 Driver Terminal":
 
         if st.session_state.filter_plate not in clean_to_display: st.session_state.filter_plate = "Όλα"
 
-        #col1, col2 = st.columns(2)
-        #sel_disp = col1.selectbox("🚚 Επιλέξτε Φορτηγό", plate_options, index=plate_options.index(clean_to_display[st.session_state.filter_plate]))
-        #plate_sel = plate_mapping[sel_disp]
-        #date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", avail_dates, index=avail_dates.index(st.session_state.filter_date))
+        col1, col2 = st.columns(2)
+        sel_disp = col1.selectbox("🚚 Επιλέξτε Φορτηγό", plate_options, index=plate_options.index(clean_to_display[st.session_state.filter_plate]))
+        plate_sel = plate_mapping[sel_disp]
+        date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", avail_dates, index=avail_dates.index(st.session_state.filter_date))
 
-        #if plate_sel != st.session_state.filter_plate or date_sel != st.session_state.filter_date:
-        #    st.session_state.filter_plate = plate_sel
-        #    st.session_state.filter_date = date_sel
-        #    st.rerun()
+        if plate_sel != st.session_state.filter_plate or date_sel != st.session_state.filter_date:
+            st.session_state.filter_plate = plate_sel
+            st.session_state.filter_date = date_sel
+            st.rerun()
 
         st.divider()
 
