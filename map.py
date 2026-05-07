@@ -246,7 +246,59 @@ if st.sidebar.button("🚪 Logout"):
     reset_shift()
     st.rerun()
 
+# ==========================================
+# 🚛 1. DRIVER TERMINAL
+# ==========================================
+if app_mode == "🚛 Driver Terminal":
+    
+    # 1. ΕΛΕΓΧΟΣ: Αν δεν έχει επιλεγεί ακόμα φορτηγό
+    if st.session_state.user_plate is None:
+        st.title("Επιλογή Δρομολογίου")
+        
+        col1, col2 = st.columns(2)
+        # Καθαρισμός λίστας πινακίδων για να μην έχουμε σφάλματα
+        raw_p = all_data['Truck License Plate'].dropna().unique().tolist()
+        plate_options = sorted([str(p) for p in raw_p])
+        
+        plate_sel = col1.selectbox("🚚 Επιλέξτε Φορτηγό", plate_options, key="unique_plate_sel")
+        
+        # Φιλτράρισμα ημερομηνιών βάσει πινακίδας
+        dates_avail = all_data[all_data['Truck License Plate'] == plate_sel]['Loading_Date'].unique()
+        date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", dates_avail, key="unique_date_sel")
+        
+        if st.button("🚀 Έναρξη Βάρδιας", type="primary", use_container_width=True):
+            st.session_state.user_plate = plate_sel.replace(' ', '').upper()
+            st.session_state.display_plate = plate_sel
+            st.session_state.loading_date = date_sel
+            st.session_state.is_logged_in = True
+            st.rerun()
 
+    # 2. ΕΛΕΓΧΟΣ: Αν επιλέχθηκε φορτηγό ΑΛΛΑ δεν έγινε ακόμα το Inspection
+    elif not st.session_state.inspected:
+        st.header("🛡️ Daily Safety Inspection")
+        st.info(f"Όχημα: {st.session_state.display_plate}")
+        
+        with st.container(border=True):
+            c1 = st.checkbox("🛞 Ελαστικά", key="check_1")
+            c2 = st.checkbox("🛢️ Λάδια / Ψυκτικό", key="check_2")
+            c3 = st.checkbox("📂 Έγγραφα", key="check_3")
+            c4 = st.checkbox("💧 AdBlue", key="check_4")
+            
+            issues = st.text_area("Παρατηρήσεις", key="issues_area")
+            
+            if st.button("🏁 Ολοκλήρωση & Εκκίνηση", type="primary"):
+                if c1 and c2 and c3 and c4:
+                    # Εδώ αποθηκεύεις στο Maintenance_Log (όπως είπαμε πριν)
+                    st.session_state.inspected = True
+                    st.rerun()
+                else:
+                    st.error("Επιλέξτε όλα τα πεδία.")
+
+    # 3. ΚΥΡΙΩΣ TERMINAL: Εμφανίζεται μόνο αν έχουν περάσει τα παραπάνω
+    else:
+        st.subheader(f"🚚 {st.session_state.display_plate} | {st.session_state.loading_date}")
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌎 Χάρτης", "🛣️ Δρομολόγηση", "📦 POD", "📊 Analytics", "📩 Alert", "🏭 Παραλαβές"])
+        # ... υπόλοιπα tabs ...
         
     
     if st.session_state.user_plate is None:
@@ -306,7 +358,7 @@ if st.sidebar.button("🚪 Logout"):
             st.info("ℹ️ Παρακαλώ επιλέξτε **Φορτηγό** και **Ημερομηνία**.")
 
     else:
-        st.subheader(f"🚚 {st.session_state.display_plate} (Φόρτωση: {st.session_state.loading_date})")
+        #st.subheader(f"🚚 {st.session_state.display_plate} (Φόρτωση: {st.session_state.loading_date})")
         
         user_data = all_data[(all_data['Plate_Clean'] == st.session_state.user_plate) & (all_data['Loading_Date'] == st.session_state.loading_date)].copy()
         gps = get_geolocation()
