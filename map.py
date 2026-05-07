@@ -569,7 +569,7 @@ if app_mode == "🚛 Driver Terminal":
 elif app_mode == "📊 Admin Dashboard":
     st.title("Admin Logistics Control Tower")
 
-    # Δημιουργία Tabs μέσα στο Admin για οργάνωση
+    # Δημιουργία Tabs για οργάνωση
     admin_tab1, admin_tab2, admin_tab3 = st.tabs(["📈 Analytics & Planning", "📦 Διαχείριση Παραλαβών", "📡 GPS Logs"])
 
     # --- TAB 1: ANALYTICS & PLANNING ---
@@ -577,67 +577,79 @@ elif app_mode == "📊 Admin Dashboard":
         st.header("Capacity Planning & Distribution")
         
         if not all_data.empty:
+            # FIX ΓΙΑ ΤΟ TYPEERROR: Καθαρίζουμε τα NaN πριν το sorted()
+            raw_plates = all_data['Truck License Plate'].dropna().unique().tolist()
+            all_plates = sorted([str(p) for p in raw_plates]) # Διασφάλιση ότι όλα είναι strings
+            
             # Φίλτρα Planning
             col_f1, col_f2 = st.columns([2, 1])
-            all_plates = sorted(all_data['Truck License Plate'].unique().tolist())
-            selected_trucks = col_f1.multiselect("🚚 Επιλογή Στόλου για Ανάλυση", all_plates, default=all_plates[:5])
+            selected_trucks = col_f1.multiselect(
+                "🚚 Επιλογή Στόλου για Ανάλυση", 
+                all_plates, 
+                default=all_plates[:min(5, len(all_plates))]
+            )
             
-            # Προετοιμασία Δεδομένων για το Timeline (Pivot Table)
+            # Φιλτράρισμα δεδομένων
             planning_df = all_data[all_data['Truck License Plate'].isin(selected_trucks)].copy()
             
-            # Δημιουργία Pivot: Rows=Trucks, Columns=Dates, Values=Total KG
-            pivot_planning = planning_df.pivot_table(
-                index='Truck License Plate', 
-                columns='Loading_Date', 
-                values='Total KG', 
-                aggfunc='sum'
-            ).fillna(0)
+            if not planning_df.empty:
+                # 1. Δημιουργία Pivot: Rows=Trucks, Columns=Dates, Values=Total KG
+                pivot_planning = planning_df.pivot_table(
+                    index='Truck License Plate', 
+                    columns='Loading_Date', 
+                    values='Total KG', 
+                    aggfunc='sum'
+                ).fillna(0)
 
-            st.subheader("📅 Χρονοδιάγραμμα Φόρτωσης (Capacity Heatmap)")
-            st.write("Τα χρώματα υποδεικνύουν την εγγύτητα στο μέγιστο φορτίο (24t).")
-            
-            # Display με background gradient για "Heatmap" εφέ
-            st.dataframe(
-                pivot_planning.style.background_gradient(cmap='YlOrRd', axis=None, low=0, high=24000)
-                .format(lambda x: f"{gr_num(x, 0)} kg"),
-                use_container_width=True
-            )
-
-            st.divider()
-            
-            # Γεωγραφική Κατανομή
-            col_g1, col_g2 = st.columns([2, 1])
-            with col_g1:
-                st.subheader("🏙️ Προορισμοί ανά Πόλη")
-                city_counts = planning_df.groupby('City_Clean')['Name'].nunique().sort_values(ascending=False).reset_index()
-                city_counts.columns = ['Πόλη', 'Πλήθος Πελατών']
-                st.bar_chart(city_counts, x='Πόλη', y='Πλήθος Πελατών', color="#007bff")
-
-            with col_g2:
-                st.subheader("📊 Key Metrics")
-                total_kg_view = planning_df['Total KG'].sum()
-                avg_load = planning_df.groupby(['Truck License Plate', 'Loading_Date'])['Total KG'].sum().mean()
+                st.subheader("📅 Χρονοδιάγραμμα Φόρτωσης (Capacity Heatmap)")
+                st.write("Οπτικοποίηση βάρους ανά ημέρα. Το σκούρο χρώμα υποδεικνύει πλήρες φορτίο.")
                 
-                st.metric("Συνολικό Βάρος", f"{gr_num(total_kg_view, 0)} kg")
-                st.metric("Μέση Φόρτωση", f"{gr_num(avg_load, 0)} kg")
+                # Εμφάνιση Heatmap Table
+                st.dataframe(
+                    pivot_planning.style.background_gradient(cmap='YlOrRd', axis=None, low=0, high=24000)
+                    .format(lambda x: f"{gr_num(x, 0)} kg"),
+                    use_container_width=True
+                )
+
+                st.divider()
                 
-                load_factor = min(avg_load / 24000, 1.0)
-                st.write(f"Efficiency: **{gr_num(load_factor*100, 1)}%**")
-                st.progress(load_factor)
+                # 2. Γεωγραφική Κατανομή & Metrics
+                col_g1, col_g2 = st.columns([2, 1])
+                with col_g1:
+                    st.subheader("🏙️ Προορισμοί ανά Πόλη")
+                    city_counts = planning_df.groupby('City_Clean')['Name'].nunique().sort_values(ascending=False).reset_index()
+                    city_counts.columns = ['Πόλη', 'Πλήθος Πελατών']
+                    st.bar_chart(city_counts, x='Πόλη', y='Πλήθος Πελατών', color="#007bff")
+
+                with col_g2:
+                    st.subheader("📊 Key Metrics")
+                    total_kg_view = planning_df['Total KG'].sum()
+                    # Υπολογισμός μέσης φόρτωσης ανά δρομολόγιο
+                    route_sums = planning_df.groupby(['Truck License Plate', 'Loading_Date'])['Total KG'].sum()
+                    avg_load = route_sums.mean() if not route_sums.empty else 0
+                    
+                    st.metric("Συνολικό Βάρος", f"{gr_num(total_kg_view, 0)} kg")
+                    st.metric("Μέση Φόρτωση", f"{gr_num(avg_load, 0)} kg")
+                    
+                    load_factor = min(avg_load / 24000, 1.0) if avg_load > 0 else 0
+                    st.write(f"Efficiency: **{gr_num(load_factor*100, 1)}%**")
+                    st.progress(load_factor)
+            else:
+                st.warning("Παρακαλώ επιλέξτε τουλάχιστον ένα φορτηγό.")
         else:
-            st.info("Αναμονή για φόρτωση δεδομένων από το SHIPMENTS_URL...")
+            st.info("Αναμονή για δεδομένα από το SHIPMENTS_URL...")
 
-    # --- TAB 2: ΔΙΑΧΕΙΡΙΣΗ ΠΑΡΑΛΑΒΩΝ (Προμηθευτές) ---
+    # --- TAB 2: ΔΙΑΧΕΙΡΙΣΗ ΠΑΡΑΛΑΒΩΝ ---
     with admin_tab2:
-        # Εδώ βάζεις τον κώδικα της φόρμας "new_pickup" και του "pickup_manager" που φτιάξαμε πριν
-        st.header("Διαχείριση Παραλαβών")
-        # ... (Κώδικας φόρμας και data_editor για αναθέσεις) ...
+        st.header("Διαχείριση Παραλαβών Προμηθευτών")
+        # Εδώ συνεχίζει ο κώδικας για το Supplier Pickups (Form & Editor)
+        # ... (Ο κώδικας που είχαμε φτιάξει για το Tab 2) ...
 
     # --- TAB 3: GPS LOGS ---
     with admin_tab3:
         st.header("Live Activity Logs")
         try:
-            logs = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=20)
-            st.dataframe(logs.tail(30), use_container_width=True)
+            logs_view = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=20)
+            st.dataframe(logs_view.tail(30), use_container_width=True)
         except:
-            st.warning("Το Transit_Log δεν είναι διαθέσιμο αυτή τη στιγμή.")
+            st.warning("Το Transit_Log δεν είναι διαθέσιμο.")
