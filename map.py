@@ -532,6 +532,10 @@ if app_mode == "🚛 Driver Terminal":
                     dur = (datetime.now(GR_TIME) - st.session_state.start_time).total_seconds() / 60
                     p_kg = cust_rows[['Unpainted', 'White', 'Colored']].sum().sum()
                     a_kg = cust_rows['Accessories'].sum()
+                    # Λήψη τρέχουσας τοποθεσίας από το session_state
+                    # Αν δεν υπάρχει (π.χ. δεν πρόλαβε να κάνει load), βάζουμε 0.0
+                    curr_lat = st.session_state.get('last_lat', 0.0)
+                    curr_lon = st.session_state.get('last_lon', 0.0)
                     
                     new_log = pd.DataFrame([{
                         "Timestamp": datetime.now(GR_TIME).strftime('%Y-%m-%d %H:%M:%S'),
@@ -541,7 +545,9 @@ if app_mode == "🚛 Driver Terminal":
                         "Profiles_KG": p_kg,
                         "Accessories_KG": a_kg,
                         "Unload_Mins": round(dur, 1),
-                        "Photo": "Yes" if photo else "No"
+                        "Photo": "Yes" if photo else "No",
+                        "Latitude": curr_lat,  # <--- ΠΡΟΣΘΗΚΗ
+                        "Longitude": curr_lon   # <--- ΠΡΟΣΘΗΚΗ
                     }])
                     
                     try:
