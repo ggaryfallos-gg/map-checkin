@@ -3,7 +3,7 @@ import pandas as pd
 from utils import clean_val
 
 # --- DATA PIPELINE ---
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner="Φόρτωση δεδομένων από Google Sheets...")
 def load_full_data():
     ship = conn.read(spreadsheet=SHIPMENTS_URL, ttl=300)
     ship.columns = ship.columns.str.strip()
