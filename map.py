@@ -619,24 +619,28 @@ elif app_mode == "📊 Admin Dashboard":
 
     st.divider()
 
-    # --- ΤΜΗΜΑ 2: ΔΙΑΧΕΙΡΙΣΗ & ΑΝΑΘΕΣΗ ΠΑΡΑΛΑΒΩΝ ---
+# --- ΤΜΗΜΑ 2: ΔΙΑΧΕΙΡΙΣΗ & ΑΝΑΘΕΣΗ ΠΑΡΑΛΑΒΩΝ ---
     st.subheader("📋 Προγραμματισμός & Ανάθεση σε Φορτηγά")
     
     try:
         pickups_df = get_supplier_pickups()
         
         if not pickups_df.empty:
-            try:
-                available_plates = sorted(all_data['Truck License Plate'].unique().tolist())
-            except:
-                available_plates = []
+            # 1. Δυναμική Λήψη Πινακίδων
+            available_plates = []
+            if 'all_data' in globals() and not all_data.empty:
+                available_plates = sorted(all_data['Truck License Plate'].dropna().unique().tolist())
+            
+            # Αν η λίστα είναι ακόμα άδεια, προσθέτουμε χειροκίνητα μερικές ή την κάνουμε TextColumn
+            if not available_plates:
+                available_plates = ["KIE6761", "KIE6762"] # Βάλε εδώ τις βασικές σου πινακίδες
 
+            # 2. Επεξεργασία πίνακα
             edited_df = st.data_editor(
                 pickups_df,
                 column_config={
                     "Date": st.column_config.TextColumn("Ημερομηνία", disabled=True),
                     "Supplier_Name": st.column_config.TextColumn("Προμηθευτής", disabled=True),
-                    "Area": st.column_config.TextColumn("Περιοχή", disabled=True),
                     "Status": st.column_config.SelectboxColumn(
                         "Κατάσταση",
                         options=["Pending", "Assigned", "Collected"],
@@ -645,30 +649,31 @@ elif app_mode == "📊 Admin Dashboard":
                     "Assigned_Plate": st.column_config.SelectboxColumn(
                         "Ανάθεση σε Πινακίδα",
                         options=available_plates,
-                        help="Επιλέξτε το φορτηγό για την παραλαβή"
+                        help="Αν δεν βλέπετε την πινακίδα, ελέγξτε το SHIPMENTS_URL"
                     ),
-                    "ID": None, "Lat": None, "Lon": None, "Address": None
+                    "ID": None, "Lat": None, "Lon": None, "Address": None, "Area": None
                 },
                 hide_index=True,
                 use_container_width=True,
-                key="pickup_manager_final"
+                key="pickup_manager_v54"
             )
 
             if st.button("💾 Αποθήκευση Αλλαγών Ανάθεσης", type="primary"):
                 try:
                     df_to_save = edited_df.fillna("")
+                    # Διασφάλιση ότι οι κρίσιμες στήλες είναι strings
                     df_to_save['Assigned_Plate'] = df_to_save['Assigned_Plate'].astype(str)
                     df_to_save['Status'] = df_to_save['Status'].astype(str)
                     
                     conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=df_to_save)
                     
                     st.success("✅ Οι αλλαγές αποθηκεύτηκαν!")
-                    time.sleep(1)
+                    time.sleep(0.5)
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Σφάλμα API (Editor Rights): {e}")
+                    st.error(f"❌ Σφάλμα API: {e}")
         else:
-            st.info("Δεν υπάρχουν εκκρεμείς παραλαβές στο σύστημα.")
+            st.info("Δεν υπάρχουν εκκρεμείς παραλαβές.")
             
     except Exception as ex:
-        st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {ex}")
+        st.error(f"Σφάλμα: {ex}")
