@@ -677,11 +677,11 @@ elif app_mode == "📊 Admin Dashboard":
                   st.success("Οι αλλαγές αποθηκεύτηκαν!")
                   time.sleep(1)
                   st.rerun()
-        else:
+          else:
               st.info("Δεν υπάρχουν εκκρεμείς παραλαβές στο σύστημα.")
           
-      except Exception as e:
-          st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {e}")
+          except Exception as e:
+              st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {e}")
 
 
   
