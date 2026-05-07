@@ -682,7 +682,7 @@ elif app_mode == "📊 Admin Dashboard":
               
           else:
               st.info("Δεν υπάρχουν εκκρεμείς παραλαβές στο σύστημα.")
-    except Exception as e:
+    except Exception as ex:
                           st.error(f"Δεν ήταν δυνατή η φόρτωση των παραλαβών: {e}")
 
 
