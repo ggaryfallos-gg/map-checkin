@@ -97,90 +97,89 @@ def render_admin_dashboard(all_data, conn, LOG_URL):
 
 # --- admin_ui.py ---
 # --- TAB 2: ΔΙΑΧΕΙΡΙΣΗ ΠΑΡΑΛΑΒΩΝ ---
+with admin_tab2:
+    st.header("Διαχείριση Παραλαβών Προμηθευτών")
+    
+    # 1. Φόρμα Νέας Παραλαβής
+    with st.expander("➕ Καταχώρηση Νέας Παραλαβής", expanded=False):
+        with st.form("new_pickup_admin", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            s_name = c1.text_input("Όνομα Προμηθευτή")
+            s_addr = c2.text_input("Διεύθυνση")
+            
+            c3, c4 = st.columns(2)
+            s_area = c3.selectbox("Περιοχή", ["Σίνδος", "Καλοχώρι", "Οινόφυτα", "Ασπρόπυργος", "Θεσσαλονίκη", "Αθήνα"])
+            p_date = c4.date_input("Ημερομηνία", value=datetime.now())
 
-    with admin_tab2:
-        st.header("Διαχείριση Παραλαβών Προμηθευτών")
+            if st.form_submit_button("Οριστική Υποβολή"):
+                if s_name and s_addr:
+                    lat, lon = geocode_address(s_addr, "")
+                    
+                    # Δημιουργία νέας εγγραφής
+                    new_entry_df = pd.DataFrame([{
+                        "ID": str(int(time.time())), 
+                        "Date": p_date.strftime("%d/%m/%Y"),
+                        "Supplier_Name": s_name, 
+                        "Address": s_addr, 
+                        "Area": s_area,
+                        "Status": "Pending", 
+                        "Assigned_Plate": "", 
+                        "Lat": lat or 0.0, 
+                        "Lon": lon or 0.0
+                    }])
+                    
+                    # ΚΡΙΣΙΜΟ: Διαβάζουμε τα ΠΑΝΤΑ πριν το update για να κάνουμε append
+                    # Χρησιμοποιούμε ttl=0 για να πάρουμε τα πιο φρέσκα δεδομένα
+                    current_all = get_supplier_pickups(conn, LOG_URL)
+                    
+                    # Συνένωση παλιών και νέων
+                    updated_data = pd.concat([current_all, new_entry_df], ignore_index=True)
+                    
+                    conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=updated_data.fillna(""))
+                    
+                    st.success(f"Καταχωρήθηκε: {s_name}")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("Συμπληρώστε Όνομα και Διεύθυνση!")
+
+    st.divider()
+
+    # 2. Manager/Editor Παραλαβών
+    # Παίρνουμε τα δεδομένα (ttl=0 για να βλέπουμε αμέσως την αλλαγή)
+    pickups_df = get_supplier_pickups(conn, LOG_URL)
+    
+    if pickups_df is not None and not pickups_df.empty:
+        st.subheader("📦 Λίστα Εκκρεμών Παραλαβών")
         
-        # 1. Φόρμα Νέας Παραλαβής
-        with st.expander("➕ Καταχώρηση Νέας Παραλαβής", expanded=False):
-            with st.form("new_pickup_admin", clear_on_submit=True):
-                c1, c2 = st.columns(2)
-                s_name = c1.text_input("Όνομα Προμηθευτή")
-                s_addr = c2.text_input("Διεύθυνση")
-                
-                c3, c4 = st.columns(2)
-                s_area = c3.selectbox("Περιοχή", ["Σίνδος", "Καλοχώρι", "Οινόφυτα", "Ασπρόπυργος", "Θεσσαλονίκη", "Αθήνα"])
-                p_date = c4.date_input("Ημερομηνία", value=datetime.now())
-    
-                if st.form_submit_button("Οριστική Υποβολή"):
-                    if s_name and s_addr:
-                        # Α. Geocoding (Μόνο στο Submit για efficiency)
-                        lat, lon = geocode_address(s_addr, "")
-                        
-                        # Β. Δημιουργία νέας εγγραφής
-                        new_entry_df = pd.DataFrame([{
-                            "ID": int(time.time()), 
-                            "Date": p_date.strftime("%d/%m/%Y"),
-                            "Supplier_Name": s_name, 
-                            "Address": s_addr, 
-                            "Area": s_area,
-                            "Status": "Pending", 
-                            "Assigned_Plate": "", 
-                            "Lat": lat or 0.0, 
-                            "Lon": lon or 0.0
-                        }])
-                        
-                        # Γ. Λήψη υπαρχόντων (Χρήση _conn από το signature)
-                        current_pickups = get_supplier_pickups(conn, LOG_URL)
-                        
-                        # Δ. ΣΥΝΕΝΩΣΗ (Εδώ ορίζεται η updated_data)
-                        updated_data = pd.concat([current_pickups, new_entry_df], ignore_index=True)
-                        
-                        # Ε. ΕΝΗΜΕΡΩΣΗ
-                        conn.update(
-                            spreadsheet=LOG_URL, 
-                            worksheet="Supplier_Pickups", 
-                            data=updated_data.fillna("")
-                        )
-                        
-                        st.success(f"Καταχωρήθηκε: {s_name}")
-                        time.sleep(0.5)
-                        st.rerun()
-                    else:
-                        st.error("Παρακαλώ συμπληρώστε Όνομα και Διεύθυνση!")
-    
-        st.divider()
-    
-        # 2. Manager/Editor Παραλαβών
-        pickups_df = get_supplier_pickups(conn, LOG_URL)
+        # Λήψη πινακίδων
+        raw_plates = all_data['Truck License Plate'].dropna().unique().tolist()
+        available_plates = sorted([str(p) for p in raw_plates])
         
-        if not pickups_df.empty:
-            st.subheader("📦 Λίστα Εκκρεμών Παραλαβών")
-            
-            # Λήψη πινακίδων για το dropdown
-            raw_plates = all_data['Truck License Plate'].dropna().unique().tolist()
-            available_plates = sorted([str(p) for p in raw_plates])
-            
-            edited_pickups = st.data_editor(
-                pickups_df,
-                column_config={
-                    "Status": st.column_config.SelectboxColumn("Κατάσταση", options=["Pending", "Assigned", "Collected"], required=True),
-                    "Assigned_Plate": st.column_config.SelectboxColumn("Ανάθεση σε Πινακίδα", options=available_plates),
-                    "ID": None, "Lat": None, "Lon": None, "Address": None, "Area": None, "Date": st.column_config.TextColumn("Ημ/νία")
-                },
-                hide_index=True, 
-                use_container_width=True, 
-                key="admin_pickup_editor"
-            )
-            
-            if st.button("💾 Αποθήκευση Αναθέσεων", type="primary"):
-                # Αποθηκεύουμε το edited_pickups απευθείας
-                conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=edited_pickups.fillna(""))
-                st.success("Οι αναθέσεις ενημερώθηκαν!")
-                time.sleep(0.5)
-                st.rerun()
-        else:
-            st.info("Δεν υπάρχουν εκκρεμείς παραλαβές.")
+        # Εμφάνιση Editor
+        edited_pickups = st.data_editor(
+            pickups_df,
+            column_config={
+                "Status": st.column_config.SelectboxColumn("Κατάσταση", options=["Pending", "Assigned", "Collected"], required=True),
+                "Assigned_Plate": st.column_config.SelectboxColumn("Ανάθεση σε Πινακίδα", options=available_plates),
+                "ID": None, "Lat": None, "Lon": None, "Address": None, "Area": None
+            },
+            hide_index=True, 
+            use_container_width=True, 
+            key="admin_pickup_editor_v1" # Άλλαξα το key για να αναγκάσω το streamlit να κάνει refresh
+        )
+        
+        if st.button("💾 Αποθήκευση Αναθέσεων", type="primary"):
+            conn.update(spreadsheet=LOG_URL, worksheet="Supplier_Pickups", data=edited_pickups.fillna(""))
+            st.success("Οι αναθέσεις ενημερώθηκαν!")
+            time.sleep(0.5)
+            st.rerun()
+    else:
+        # Debugging αν δεν εμφανίζεται ο πίνακας
+        st.info("Δεν βρέθηκαν εκκρεμείς παραλαβές στο Sheet.")
+        if pickups_df is not None:
+             with st.expander("Debug Raw Data"):
+                 st.write(pickups_df)
                     
     # --- TAB 3: GPS LOGS ---
     with admin_tab3:
