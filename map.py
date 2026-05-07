@@ -289,11 +289,39 @@ if app_mode == "🚛 Driver Terminal":
             
             if st.button("🏁 Ολοκλήρωση & Εκκίνηση", type="primary"):
                 if c1 and c2 and c3 and c4:
-                    # Εδώ αποθηκεύεις στο Maintenance_Log (όπως είπαμε πριν)
-                    st.session_state.inspected = True
-                    st.rerun()
+                    try:
+                        # 1. Δημιουργία του Log entry
+                        new_entry = pd.DataFrame([{
+                            "Timestamp": datetime.now(GR_TIME).strftime('%Y-%m-%d %H:%M:%S'),
+                            "Driver": st.session_state.username,
+                            "Plate": st.session_state.display_plate,
+                            "Tires": "OK", 
+                            "Oil_Coolant": "OK", 
+                            "Documents": "OK", 
+                            "AdBlue": "OK",
+                            "Comments": issues
+                        }])
+
+                        # 2. Ανάγνωση του υπάρχοντος Maintenance_Log
+                        # Βεβαιώσου ότι το worksheet "Maintenance_Log" υπάρχει στο Excel σου
+                        current_m_log = conn.read(spreadsheet=LOG_URL, worksheet="Maintenance_Log", ttl=0)
+                        
+                        # 3. Προσθήκη της νέας γραμμής
+                        updated_m_log = pd.concat([current_m_log, new_entry], ignore_index=True)
+                        
+                        # 4. Ενημέρωση του Google Sheets
+                        conn.update(spreadsheet=LOG_URL, worksheet="Maintenance_Log", data=updated_m_log)
+                        
+                        # 5. Αλλαγή state και rerun
+                        st.session_state.inspected = True
+                        st.success("✅ Η επιθεώρηση καταγράφηκε επιτυχώς!")
+                        time.sleep(1)
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Αποτυχία εγγραφής στο Excel: {e}")
                 else:
-                    st.error("Επιλέξτε όλα τα πεδία.")
+                    st.error("⚠️ Πρέπει να επιλέξετε όλα τα πεδία για να συνεχίσετε.")
         st.stop()
 
     # 3. ΚΥΡΙΩΣ TERMINAL: Εμφανίζεται μόνο αν έχουν περάσει τα παραπάνω
