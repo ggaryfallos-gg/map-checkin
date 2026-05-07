@@ -255,14 +255,14 @@ if app_mode == "🚛 Driver Terminal":
     if st.session_state.user_plate is None:
         st.title("Επιλογή Δρομολογίου")
         
-        col1, col2 = st.columns(2)
-        # Καθαρισμός λίστας πινακίδων για να μην έχουμε σφάλματα
-        raw_p = all_data['Truck License Plate'].dropna().unique().tolist()
-        plate_options = sorted([str(p) for p in raw_p])
+        #col1, col2 = st.columns(2)
+        ## Καθαρισμός λίστας πινακίδων για να μην έχουμε σφάλματα
+        #raw_p = all_data['Truck License Plate'].dropna().unique().tolist()
+        #plate_options = sorted([str(p) for p in raw_p])
         
         #plate_sel = col1.selectbox("🚚 Επιλέξτε Φορτηγό", plate_options, key="unique_plate_sel")
         
-        # Φιλτράρισμα ημερομηνιών βάσει πινακίδας
+        ## Φιλτράρισμα ημερομηνιών βάσει πινακίδας
         #dates_avail = all_data[all_data['Truck License Plate'] == plate_sel]['Loading_Date'].unique()
         #date_sel = col2.selectbox("📅 Ημ/νία Φόρτωσης", dates_avail, key="unique_date_sel")
         
