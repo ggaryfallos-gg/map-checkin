@@ -198,7 +198,7 @@ def render_admin_dashboard(all_data, conn, LOG_URL):
                 st.rerun()
             else:
             # Debugging αν δεν εμφανίζεται ο πίνακας
-            st.info("Δεν βρέθηκαν εκκρεμείς παραλαβές στο Sheet.")
+                st.info("Δεν βρέθηκαν εκκρεμείς παραλαβές στο Sheet.")
             if pickups_df is not None:
                  with st.expander("Debug Raw Data"):
                      st.write(pickups_df)
