@@ -79,48 +79,55 @@ def render_public_tracking(plate, _conn,log_url):
     
     # Διάβασμα του Transit_Log (χωρίς cache για να είναι live)
     try:
-        # Διάβασμα των logs
+        # 1. Διάβασμα των logs
         df = _conn.read(spreadsheet=log_url, worksheet="Transit_Log", ttl=0)
         
         if df is not None and not df.empty:
-            # Καθαρισμός ονομάτων στηλών (αφαίρεση κενών)
+            # Καθαρισμός επικεφαλίδων (για σιγουριά)
             df.columns = [c.strip() for c in df.columns]
             
-            # Φιλτράρισμα για τη συγκεκριμένη πινακίδα
-            truck_logs = df[df['Plate'] == plate].tail(1)
+            # 2. Φιλτράρισμα για την πινακίδα (Προσοχή: strip για να πιάσει KIE 6761 και KIE6761)
+            # Δημιουργούμε μια προσωρινή στήλη χωρίς κενά για το search
+            df['SearchPlate'] = df['Plate'].str.replace(' ', '')
+            target_plate = plate.replace(' ', '')
+            
+            truck_logs = df[df['SearchPlate'] == target_plate].tail(1)
             
             if not truck_logs.empty:
                 last_pos = truck_logs.iloc[0]
                 
-                # Metrics
+                # 3. Εμφάνιση Metrics
                 c1, c2 = st.columns(2)
-                c1.metric("Τελευταία Ενημέρωση", last_pos.get('Timestamp', 'N/A'))
-                c2.metric("Κατάσταση", "Καθ' οδόν")
+                # Χρησιμοποιούμε 'Timestamp' (όπως είναι στο Sheet σου)
+                c1.metric("Τελευταίο Στίγμα", str(last_pos['Timestamp']))
+                c2.metric("Κατάσταση", "Εν Κινήσει")
                 
-                # Έλεγχος για τη στήλη Location ή εναλλακτικές
-                loc = last_pos.get('Location') or last_pos.get('location') or "Μη διαθέσιμη τοποθεσία"
-                st.info(f"📍 Τρέχουσα Περιοχή: **{loc}**")
-                
-                # Αν υπάρχουν συντεταγμένες, δείξε χάρτη
-                if 'Lat' in last_pos and 'Lon' in last_pos:
+                # 4. Χάρτης με τις στήλες Latitude & Longitude
+                if 'Latitude' in last_pos and 'Longitude' in last_pos:
+                    import pandas as pd
                     try:
-                        import pandas as pd
-                        lat = float(str(last_pos['Lat']).replace(',', '.'))
-                        lon = float(str(last_pos['Lon']).replace(',', '.'))
+                        lat = float(last_pos['Latitude'])
+                        lon = float(last_pos['Longitude'])
                         map_df = pd.DataFrame({'lat': [lat], 'lon': [lon]})
-                        st.map(map_df)
-                    except:
-                        st.warning("Αδυναμία απεικόνισης χάρτη (Λάθος συντεταγμένες).")
+                        
+                        # Εμφάνιση Χάρτη
+                        st.map(map_df, zoom=12)
+                        
+                        st.success(f"Το όχημα {plate} εντοπίστηκε επιτυχώς.")
+                    except Exception as e:
+                        st.warning(f"Πρόβλημα στις συντεταγμένες: {e}")
+                else:
+                    st.warning("Δεν βρέθηκαν γεωγραφικά δεδομένα (Latitude/Longitude).")
             else:
-                st.warning(f"Δεν βρέθηκαν πρόσφατα δεδομένα για το όχημα {plate}.")
+                st.warning(f"Δεν βρέθηκαν πρόσφατα logs για την πινακίδα: {plate}")
         else:
-            st.error("Το αρχείο καταγραφής είναι άδειο.")
+            st.error("Το αρχείο καταγραφής (Transit_Log) είναι άδειο.")
             
     except Exception as e:
-        st.error(f"Debug Error: {e}")
-        # Δείξε μας τις στήλες για να ξέρουμε τι φταίει
+        st.error(f"Σφάλμα ανάγνωσης δεδομένων: {e}")
+        # Debugging: Δείξε μας τι διαβάζει το app
         if 'df' in locals():
-            st.write("Διαθέσιμες στήλες στο Sheet:", list(df.columns))
+            st.write("Στήλες που βρέθηκαν στο Sheet:", list(df.columns))
     
     st.divider()
     st.caption("Powered by Alumil Logistics System")
