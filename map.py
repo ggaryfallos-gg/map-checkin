@@ -65,39 +65,39 @@ def main():
     if not check_password(): st.stop()
     
     if st.session_state.password_correct:
-    # 1. Φόρτωση Δεδομένων (Original)
-    fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL)
+        # 1. Φόρτωση Δεδομένων (Original)
+        fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL)
+        
+        # --- SIDEBAR (Simple & Stable) ---
+        with st.sidebar:
+            col1, col2 = st.columns([1, 1])
+            if col1.button("🔒 Log Out"):
+                st.session_state.password_correct = False
+                st.rerun()
+            
+            # Σωστό Date format χωρίς crash
+            import datetime
+            now_gr = datetime.datetime.now(GR_TIME)
+            col2.write(f"📅 {now_gr.strftime('%d/%m/%Y')}")
+            
+            st.markdown("---")
+            app_mode = st.radio("📑 Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
+            
+            # Επαναφορά στα αρχικά φίλτρα που ξέρουμε ότι δουλεύουν
+            st.markdown("---")
+            st.subheader("🔍 Φίλτρα")
+            
+            # Εδώ χρησιμοποιούμε το αρχικό fleet_info χωρίς "έξυπνα" φιλτραρίσματα
+            plates_list = ["Όλα"] + sorted(fleet_info['Truck License Plate'].unique().tolist())
+            selected_plate = st.selectbox("Επιλογή Πινακίδας", options=plates_list)
+            st.session_state.filter_plate = selected_plate
     
-    # --- SIDEBAR (Simple & Stable) ---
-    with st.sidebar:
-        col1, col2 = st.columns([1, 1])
-        if col1.button("🔒 Log Out"):
-            st.session_state.password_correct = False
-            st.rerun()
-        
-        # Σωστό Date format χωρίς crash
-        import datetime
-        now_gr = datetime.datetime.now(GR_TIME)
-        col2.write(f"📅 {now_gr.strftime('%d/%m/%Y')}")
-        
-        st.markdown("---")
-        app_mode = st.radio("📑 Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
-        
-        # Επαναφορά στα αρχικά φίλτρα που ξέρουμε ότι δουλεύουν
-        st.markdown("---")
-        st.subheader("🔍 Φίλτρα")
-        
-        # Εδώ χρησιμοποιούμε το αρχικό fleet_info χωρίς "έξυπνα" φιλτραρίσματα
-        plates_list = ["Όλα"] + sorted(fleet_info['Truck License Plate'].unique().tolist())
-        selected_plate = st.selectbox("Επιλογή Πινακίδας", options=plates_list)
-        st.session_state.filter_plate = selected_plate
-
-    # --- MAIN ROUTING (Direct) ---
-    if app_mode == "🚛 Driver Terminal":
-        # Στέλνουμε το αυθεντικό fleet_info όπως ακριβώς έρχεται από τη βάση
-        render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
-    else:
-        render_admin_dashboard(all_data, conn, LOG_URL)
+        # --- MAIN ROUTING (Direct) ---
+        if app_mode == "🚛 Driver Terminal":
+            # Στέλνουμε το αυθεντικό fleet_info όπως ακριβώς έρχεται από τη βάση
+            render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+        else:
+            render_admin_dashboard(all_data, conn, LOG_URL)
 
 
 # --- ΕΚΤΕΛΕΣΗ ΤΗΣ ΜΑΙΝ ---
