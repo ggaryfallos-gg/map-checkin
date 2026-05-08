@@ -83,53 +83,64 @@ def render_public_tracking(plate, _conn, log_url):
             df['SearchPlate'] = df['Plate'].str.replace(' ', '')
             target_plate = plate.replace(' ', '')
             
-            # Φιλτράρισμα και ταξινόμηση
+            # Φιλτράρισμα και sorting βάσει χρόνου
             truck_logs = df[df['SearchPlate'] == target_plate].copy()
             truck_logs['Timestamp'] = pd.to_datetime(truck_logs['Timestamp'])
             truck_logs = truck_logs.sort_values('Timestamp')
             
             if not truck_logs.empty:
-                # Παίρνουμε τα τελευταία 5 σημεία για τη γραμμή
+                # Παίρνουμε τα τελευταία 5 σημεία
                 last_5_df = truck_logs.tail(5)
                 
-                # Προετοιμασία δεδομένων για το PathLayer (μορφή [[lon, lat], [lon, lat]])
-                path_data = [
-                    {
-                        "path": last_5_df[['Longitude', 'Latitude']].values.tolist(),
-                        "name": plate,
-                        "color": [0, 123, 255] # Alumil Blue
-                    }
+                # 1. Δεδομένα για τη Γραμμή (Path)
+                path_data = [{
+                    "path": last_5_df[['Longitude', 'Latitude']].values.tolist(),
+                    "color": [0, 0, 255, 200] # Μπλε γραμμή
+                }]
+
+                # 2. Δεδομένα για το τρέχον σημείο (Marker)
+                current_pos = last_5_df.tail(1)
+
+                # Σχεδιασμός Layers
+                layers = [
+                    # Layer 1: Η γραμμή της διαδρομής
+                    pdk.Layer(
+                        "PathLayer",
+                        path_data,
+                        get_path="path",
+                        get_width=15,
+                        get_color="color",
+                        width_min_pixels=3,
+                    ),
+                    # Layer 2: Κόκκινη κουκκίδα στο τελευταίο στίγμα
+                    pdk.Layer(
+                        "ScatterplotLayer",
+                        current_pos,
+                        get_position=['Longitude', 'Latitude'],
+                        get_color=[255, 0, 0],
+                        get_radius=100,
+                        radius_min_pixels=5,
+                    )
                 ]
 
-                # Ορισμός του Layer για τη γραμμή
-                layer = pdk.Layer(
-                    "PathLayer",
-                    path_data,
-                    get_path="path",
-                    get_width=5,
-                    get_color="color",
-                    width_min_pixels=3,
-                    pickable=True,
-                )
-
-                # Ορισμός της αρχικής προβολής (κεντράρισμα στο τελευταίο σημείο)
+                # Προβολή Χάρτη
                 view_state = pdk.ViewState(
-                    latitude=last_5_df['Latitude'].iloc[-1],
-                    longitude=last_5_df['Longitude'].iloc[-1],
-                    zoom=13,
+                    latitude=current_pos['Latitude'].iloc[0],
+                    longitude=current_pos['Longitude'].iloc[0],
+                    zoom=12,
                     pitch=0
                 )
 
-                # Εμφάνιση του χάρτη
+                # Εμφάνιση του χάρτη με υπόβαθρο δρόμων
                 st.pydeck_chart(pdk.Deck(
-                    layers=[layer],
+                    layers=layers,
                     initial_view_state=view_state,
-                    map_style="mapbox://styles/mapbox/light-v9", # Καθαρό industrial look
-                    tooltip={"text": "Όχημα: {name}"}
+                    map_style="mapbox://styles/mapbox/streets-v11", # ΕΔΩ ΕΙΝΑΙ ΟΙ ΔΡΟΜΟΙ
+                    tooltip=True
                 ))
 
-                # Πίνακας για επιβεβαίωση
-                st.subheader("📋 Τελευταία 5 Στίγματα")
+                # Data Table (για το efficiency)
+                st.subheader("📋 Ιστορικό Τελευταίων 5 Στιγμάτων")
                 st.dataframe(last_5_df.sort_values('Timestamp', ascending=False)[['Timestamp', 'Latitude', 'Longitude']], hide_index=True)
                 
             else:
