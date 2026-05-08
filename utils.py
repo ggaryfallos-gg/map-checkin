@@ -79,30 +79,48 @@ def render_public_tracking(plate, _conn,log_url):
     
     # Διάβασμα του Transit_Log (χωρίς cache για να είναι live)
     try:
-        # Χρησιμοποιούμε τη σύνδεση που έχουμε ήδη
-        df = _conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
-        truck_logs = df[df['Plate'] == plate].tail(1)
+        # Διάβασμα των logs
+        df = _conn.read(spreadsheet=log_url, worksheet="Transit_Log", ttl=0)
         
-        if not truck_logs.empty:
-            last_pos = truck_logs.iloc[0]
+        if df is not None and not df.empty:
+            # Καθαρισμός ονομάτων στηλών (αφαίρεση κενών)
+            df.columns = [c.strip() for c in df.columns]
             
-            # Display Info
-            c1, c2 = st.columns(2)
-            c1.metric("Τελευταία Ενημέρωση", last_pos['Timestamp'])
-            c2.metric("Κατάσταση", "Καθ' οδόν")
+            # Φιλτράρισμα για τη συγκεκριμένη πινακίδα
+            truck_logs = df[df['Plate'] == plate].tail(1)
             
-            st.info(f"📍 Τρέχουσα Περιοχή: **{last_pos['Location']}**")
-            
-            # Map (Προαιρετικά, αν έχεις Lat/Lon στα logs)
-            if 'Lat' in last_pos and 'Lon' in last_pos:
-                map_data = pd.DataFrame({'lat': [float(last_pos['Latitude'])], 'lon': [float(last_pos['Longitude'])]})
-                st.map(map_data)
+            if not truck_logs.empty:
+                last_pos = truck_logs.iloc[0]
+                
+                # Metrics
+                c1, c2 = st.columns(2)
+                c1.metric("Τελευταία Ενημέρωση", last_pos.get('Timestamp', 'N/A'))
+                c2.metric("Κατάσταση", "Καθ' οδόν")
+                
+                # Έλεγχος για τη στήλη Location ή εναλλακτικές
+                loc = last_pos.get('Location') or last_pos.get('location') or "Μη διαθέσιμη τοποθεσία"
+                st.info(f"📍 Τρέχουσα Περιοχή: **{loc}**")
+                
+                # Αν υπάρχουν συντεταγμένες, δείξε χάρτη
+                if 'Lat' in last_pos and 'Lon' in last_pos:
+                    try:
+                        import pandas as pd
+                        lat = float(str(last_pos['Lat']).replace(',', '.'))
+                        lon = float(str(last_pos['Lon']).replace(',', '.'))
+                        map_df = pd.DataFrame({'lat': [lat], 'lon': [lon]})
+                        st.map(map_df)
+                    except:
+                        st.warning("Αδυναμία απεικόνισης χάρτη (Λάθος συντεταγμένες).")
+            else:
+                st.warning(f"Δεν βρέθηκαν πρόσφατα δεδομένα για το όχημα {plate}.")
         else:
-            st.warning("Δεν υπάρχουν πρόσφατα δεδομένα για αυτό το όχημα.")
+            st.error("Το αρχείο καταγραφής είναι άδειο.")
             
     except Exception as e:
-        st.error(f"Debug Error: {e}") # Αυτό θα μας πει το πραγματικό πρόβλημα
-        #st.error("Αδυναμία σύνδεσης με την υπηρεσία tracking.")
+        st.error(f"Debug Error: {e}")
+        # Δείξε μας τις στήλες για να ξέρουμε τι φταίει
+        if 'df' in locals():
+            st.write("Διαθέσιμες στήλες στο Sheet:", list(df.columns))
     
     st.divider()
     st.caption("Powered by Alumil Logistics System")
