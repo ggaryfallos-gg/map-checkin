@@ -111,8 +111,21 @@ def main():
             st.session_state.filter_plate = selected_plate
     
         # --- MAIN CONTENT ROUTING ---
-        if app_mode == "🚛 Driver Terminal":
-            render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+        # --- MAIN CONTENT ROUTING ---
+    if app_mode == "🚛 Driver Terminal":
+        # Φιλτράρισμα του fleet_info ώστε να δείχνει μόνο τον επιλεγμένο τύπο στόλου
+        if fleet_type == "Δικά μας (Own)":
+            filtered_fleet = [f for f in fleet_info if f.replace(" ", "") in own_fleet]
+        elif fleet_type == "Εξωτερικά":
+            filtered_fleet = [f for f in fleet_info if f.replace(" ", "") in ext_fleet]
+        else:
+            filtered_fleet = fleet_info
+
+        # Περνάμε το filtered_fleet αντί για το σκέτο fleet_info
+        render_driver_terminal(all_data, filtered_fleet, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+    
+    else:
+        render_admin_dashboard(all_data, conn, LOG_URL)
         else:
             render_admin_dashboard(all_data, conn, LOG_URL)
 
