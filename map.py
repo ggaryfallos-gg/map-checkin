@@ -75,7 +75,7 @@ def main():
                 st.session_state.password_correct = False
                 st.rerun()
             now_gr = datetime.datetime.now(GR_TIME)
-            col2.write(f"📅 {GR_TIME.strftime('%d/%m/%Y')}")
+            col2.write(f"📅 {now_gr.strftime('%d/%m/%Y')}")
             
             st.markdown("---")
             
