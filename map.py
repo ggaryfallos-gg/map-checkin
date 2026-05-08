@@ -113,37 +113,41 @@ def main():
     # --- MAIN CONTENT ROUTING ---
     # --- MAIN CONTENT ROUTING ---
     if app_mode == "🚛 Driver Terminal":
-        # 1. Καθαρίζουμε τις πινακίδες του fleet_info (δρομολόγια) για τη σύγκριση
-        fleet_info_clean = fleet_info.copy()
-        # Φτιάχνουμε μια στήλη 'MatchPlate' χωρίς κενά
-        fleet_info_clean['MatchPlate'] = fleet_info_clean['Truck License Plate'].astype(str).str.replace(" ", "").str.upper()
+        # 1. Προετοιμασία λιστών για σύγκριση (όλα χωρίς κενά και κεφαλαία)
+        clean_own = [p.replace(" ", "").upper() for p in own_fleet]
+        clean_ext = [p.replace(" ", "").upper() for p in ext_fleet]
 
-        # 2. Φιλτράρισμα βάσει τύπου στόλου (Own/External)
+        # 2. Φιλτράρισμα του fleet_info
+        # Δημιουργούμε ένα mask (φίλτρο) βασισμένο στην καθαρή μορφή της στήλης
+        def is_in_fleet(plate_val, target_list):
+            clean_val = str(plate_val).replace(" ", "").upper()
+            return clean_val in target_list
+
         if fleet_type == "Δικά μας (Own)":
-            # Οι πινακίδες στο own_fleet είναι ήδη χωρίς κενά από το προηγούμενο βήμα
-            search_list = [p.upper() for p in own_fleet]
-            filtered_df = fleet_info_clean[fleet_info_clean['MatchPlate'].isin(search_list)]
+            mask = fleet_info['Truck License Plate'].apply(lambda x: is_in_fleet(x, clean_own))
+            filtered_df = fleet_info[mask]
         elif fleet_type == "Εξωτερικά":
-            search_list = [p.upper() for p in ext_fleet]
-            filtered_df = fleet_info_clean[fleet_info_clean['MatchPlate'].isin(search_list)]
+            mask = fleet_info['Truck License Plate'].apply(lambda x: is_in_fleet(x, clean_ext))
+            filtered_df = fleet_info[mask]
         else:
-            filtered_df = fleet_info_clean
+            filtered_df = fleet_info
 
-        # 3. Επιπλέον φιλτράρισμα αν έχει επιλεγεί συγκεκριμένη πινακίδα στο Sidebar Selectbox
+        # 3. Επιπλέον φιλτράρισμα αν έχει επιλεγεί συγκεκριμένη πινακίδα από το Selectbox
         if selected_plate != "Όλα":
-            # Καθαρίζουμε και την επιλεγμένη πινακίδα από κενά για το match
-            target_p = selected_plate.replace(" ", "").upper()
-            filtered_df = filtered_df[filtered_df['MatchPlate'] == target_p]
+            clean_selected = selected_plate.replace(" ", "").upper()
+            mask_selected = filtered_df['Truck License Plate'].apply(lambda x: str(x).replace(" ", "").upper() == clean_selected)
+            filtered_df = filtered_df[mask_selected]
 
-        # Αφαιρούμε την προσωρινή στήλη πριν το στείλουμε στο UI για να μην χαλάσει το layout
-        final_df = filtered_df.drop(columns=['MatchPlate'])
-
-        if final_df.empty:
-            st.warning("⚠️ Δεν βρέθηκαν δεδομένα για τις επιλογές σας. Ελέγξτε αν οι πινακίδες στο φύλλο Plates ταυτίζονται με τα δρομολόγια.")
-            # Στέλνουμε το αρχικό fleet_info ως fallback για να μην μείνει κενό το dropdown
+        # 4. Routing με έλεγχο αποτελεσμάτων
+        if filtered_df.empty and (fleet_type != "Όλα" or selected_plate != "Όλα"):
+            st.warning("⚠️ Δεν βρέθηκαν δεδομένα. Οι πινακίδες στο 'Plates' πρέπει να ταιριάζουν με τα δρομολόγια (έστω και χωρίς κενά).")
+            # Δείχνουμε τα πάντα ως fallback για να μην "κολλήσει" ο χρήστης
             render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
         else:
-            render_driver_terminal(all_data, final_df, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+            render_driver_terminal(all_data, filtered_df, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+    
+    else:
+        render_admin_dashboard(all_data, conn, LOG_URL)
 
 
 # --- ΕΚΤΕΛΕΣΗ ΤΗΣ ΜΑΙΝ ---
