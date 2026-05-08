@@ -68,7 +68,7 @@ def get_cached_geodesic(p1, p2):
     return geodesic(p1, p2).km
 
 
-def render_public_tracking(plate):
+def render_public_tracking(plateplate, _conn):
     st.set_page_config(page_title=f"Live Tracking - {plate}", layout="centered")
     
     # Industrial Style Header
@@ -77,7 +77,7 @@ def render_public_tracking(plate):
     # Διάβασμα του Transit_Log (χωρίς cache για να είναι live)
     try:
         # Χρησιμοποιούμε τη σύνδεση που έχουμε ήδη
-        df = conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
+        df = _conn.read(spreadsheet=LOG_URL, worksheet="Transit_Log", ttl=0)
         truck_logs = df[df['Plate'] == plate].tail(1)
         
         if not truck_logs.empty:
