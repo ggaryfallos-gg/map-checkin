@@ -68,7 +68,7 @@ def get_cached_geodesic(p1, p2):
     return geodesic(p1, p2).km
 
 
-def render_public_tracking(plateplate, _conn,log_url):
+def render_public_tracking(plate, _conn,log_url):
     st.set_page_config(page_title=f"Live Tracking - {plate}", layout="centered")
     
     # Industrial Style Header
