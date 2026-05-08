@@ -80,41 +80,21 @@ def main():
         app_mode = st.radio("📑 Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
         
         st.markdown("---")
-        st.subheader("🔍 Φιλτράρισμα Στόλου")
-        
-        # 1. Φόρτωση του "Master" αρχείου πινακίδων από το GSheets
-        try:
-            df_plates = conn.read(spreadsheet=LOG_URL, worksheet="Plates", ttl=300)
-            df_plates.columns = [c.strip() for c in df_plates.columns]
-            
-            # Δημιουργούμε λίστες αναφοράς (χωρίς κενά για σιγουριά)
-            own_ref = df_plates[df_plates['Type'] == 'Own']['Plate'].astype(str).str.replace(" ", "").unique().tolist()
-            ext_ref = df_plates[df_plates['Type'] != 'Own']['Plate'].astype(str).str.replace(" ", "").unique().tolist()
-        except:
-            own_ref, ext_ref = [], []
+        st.subheader("🔍 Φιλτράρισμα")
 
-        # 2. Φίλτρο Τύπου Στόλου (Radio)
-        fleet_type = st.radio("Τύπος Στόλου", ["Όλα", "Δικά μας (Own)", "Εξωτερικά"], index=0)
         
-        # 3. Δυναμικό χτίσιμο της λίστας για το Selectbox
-        # Παίρνουμε όλες τις πινακίδες από τα τρέχοντα δρομολόγια
-        raw_plates = sorted([str(p) for p in fleet_info['Truck License Plate'].unique()])
         
-        if fleet_type == "Δικά μας (Own)":
-            final_options = ["Όλα"] + [p for p in raw_plates if p.replace(" ", "") in own_ref]
-        elif fleet_type == "Εξωτερικά":
-            final_options = ["Όλα"] + [p for p in raw_plates if p.replace(" ", "") in ext_ref]
-        else:
-            final_options = ["Όλα"] + raw_plates
-
-        # 4. Εμφάνιση του Selectbox
-        if st.session_state.filter_plate not in final_options:
+        # Καθαρό φίλτρο πινακίδας
+        all_plates = ["Όλα"] + sorted([str(p) for p in fleet_info['Truck License Plate'].unique()])
+        
+        # Χρησιμοποιούμε το index για να κρατάμε την επιλογή σωστά
+        if st.session_state.filter_plate not in all_plates:
             st.session_state.filter_plate = "Όλα"
             
         selected_plate = st.selectbox(
             "Επιλογή Πινακίδας", 
-            options=final_options,
-            index=final_options.index(st.session_state.filter_plate)
+            options=all_plates,
+            index=all_plates.index(st.session_state.filter_plate)
         )
         st.session_state.filter_plate = selected_plate
 
