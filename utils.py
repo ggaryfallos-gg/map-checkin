@@ -98,7 +98,8 @@ def render_public_tracking(plate, _conn,log_url):
             st.warning("Δεν υπάρχουν πρόσφατα δεδομένα για αυτό το όχημα.")
             
     except Exception as e:
-        st.error("Αδυναμία σύνδεσης με την υπηρεσία tracking.")
+        st.error(f"Debug Error: {e}") # Αυτό θα μας πει το πραγματικό πρόβλημα
+        #st.error("Αδυναμία σύνδεσης με την υπηρεσία tracking.")
     
     st.divider()
     st.caption("Powered by Alumil Logistics System")
