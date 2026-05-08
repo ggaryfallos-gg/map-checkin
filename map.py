@@ -120,14 +120,11 @@ def main():
             filtered_fleet = [f for f in fleet_info if f.replace(" ", "") in ext_fleet]
         else:
             filtered_fleet = fleet_info
-
         # Περνάμε το filtered_fleet αντί για το σκέτο fleet_info
-        render_driver_terminal(all_data, filtered_fleet, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
-    
+        render_driver_terminal(all_data, filtered_fleet, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)    
     else:
         render_admin_dashboard(all_data, conn, LOG_URL)
-        else:
-            render_admin_dashboard(all_data, conn, LOG_URL)
+
 
 # --- ΕΚΤΕΛΕΣΗ ΤΗΣ ΜΑΙΝ ---
 if __name__ == "__main__":
