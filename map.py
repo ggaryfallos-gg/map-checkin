@@ -65,50 +65,39 @@ def main():
     if not check_password(): st.stop()
     
     if st.session_state.password_correct:
-        # 1. Φόρτωση Δεδομένων
-        fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL)
+    # 1. Φόρτωση Δεδομένων (Original)
+    fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL)
+    
+    # --- SIDEBAR (Simple & Stable) ---
+    with st.sidebar:
+        col1, col2 = st.columns([1, 1])
+        if col1.button("🔒 Log Out"):
+            st.session_state.password_correct = False
+            st.rerun()
         
-        # --- SIDEBAR ORGANIZATION ---
-        with st.sidebar:
-            # LOGOUT & DATE
-            col1, col2 = st.columns([1, 1])
-            if col1.button("🔒 Log Out"):
-                st.session_state.password_correct = False
-                st.rerun()
-            now_gr = datetime.datetime.now(GR_TIME)
-            col2.write(f"📅 {now_gr.strftime('%d/%m/%Y')}")
-            
-            st.markdown("---")
-            
-            # MENU SELECTOR
-            app_mode = st.radio("📑 Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
-            
-            st.markdown("---")
-            st.subheader("🔍 Φίλτρα Στόλου")
-            
-            # ΦΟΡΤΩΣΗ ΠΙΝΑΚΙΔΩΝ ΑΠΟ ΤΟ ΦΥΛΛΟ "Plates"
-            try:
-                df_plates = conn.read(spreadsheet=LOG_URL, worksheet="Plates", ttl=300)
-                df_plates.columns = [c.strip() for c in df_plates.columns]
-                # Υποθέτουμε ότι έχεις στήλη 'Type' (Own/External) και 'Plate'
-                own_fleet = df_plates[df_plates['Type'] == 'Own']['Plate'].str.replace(" ", "").tolist()
-                ext_fleet = df_plates[df_plates['Type'] != 'Own']['Plate'].str.replace(" ", "").tolist()
-            except:
-                own_fleet, ext_fleet = [], []
-    
-            # ΦΙΛΤΡΟ ΙΔΙΟΚΤΗΤΑ Ή ΟΧΙ
-            fleet_type = st.radio("Τύπος Στόλου", ["Δικά μας (Own)", "Εξωτερικά", "Όλα"], index=2)
-            
-            # ΔΥΝΑΜΙΚΗ ΛΙΣΤΑ ΠΙΝΑΚΙΔΩΝ
-            if fleet_type == "Δικά μας (Own)":
-                current_options = ["Όλα"] + sorted(own_fleet)
-            elif fleet_type == "Εξωτερικά":
-                current_options = ["Όλα"] + sorted(ext_fleet)
-            else:
-                current_options = ["Όλα"] + sorted(own_fleet + ext_fleet)
-    
-            selected_plate = st.selectbox("Επιλογή Πινακίδας", options=current_options)
-            st.session_state.filter_plate = selected_plate
+        # Σωστό Date format χωρίς crash
+        import datetime
+        now_gr = datetime.datetime.now(GR_TIME)
+        col2.write(f"📅 {now_gr.strftime('%d/%m/%Y')}")
+        
+        st.markdown("---")
+        app_mode = st.radio("📑 Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
+        
+        # Επαναφορά στα αρχικά φίλτρα που ξέρουμε ότι δουλεύουν
+        st.markdown("---")
+        st.subheader("🔍 Φίλτρα")
+        
+        # Εδώ χρησιμοποιούμε το αρχικό fleet_info χωρίς "έξυπνα" φιλτραρίσματα
+        plates_list = ["Όλα"] + sorted(fleet_info['Truck License Plate'].unique().tolist())
+        selected_plate = st.selectbox("Επιλογή Πινακίδας", options=plates_list)
+        st.session_state.filter_plate = selected_plate
+
+    # --- MAIN ROUTING (Direct) ---
+    if app_mode == "🚛 Driver Terminal":
+        # Στέλνουμε το αυθεντικό fleet_info όπως ακριβώς έρχεται από τη βάση
+        render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+    else:
+        render_admin_dashboard(all_data, conn, LOG_URL)
     
     # --- MAIN CONTENT ROUTING ---
     # --- MAIN CONTENT ROUTING ---
