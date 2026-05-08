@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import pydeck as pdk
 import requests
 import urllib.parse
 import time
@@ -72,55 +73,66 @@ def get_cached_geodesic(p1, p2):
 
 
 def render_public_tracking(plate, _conn, log_url):
-    st.title(f"📍 Live Tracking: {plate}")
+    st.title(f"📍 Live Route: {plate}")
     
     try:
-        # 1. Ανάγνωση δεδομένων
         df = _conn.read(spreadsheet=log_url, worksheet="Transit_Log", ttl=0)
         
         if df is not None and not df.empty:
             df.columns = [c.strip() for c in df.columns]
-            
-            # 2. Φιλτράρισμα και Καθαρισμός Πινακίδας
             df['SearchPlate'] = df['Plate'].str.replace(' ', '')
             target_plate = plate.replace(' ', '')
+            
+            # Φιλτράρισμα και ταξινόμηση
             truck_logs = df[df['SearchPlate'] == target_plate].copy()
+            truck_logs['Timestamp'] = pd.to_datetime(truck_logs['Timestamp'])
+            truck_logs = truck_logs.sort_values('Timestamp')
             
             if not truck_logs.empty:
-                # Μετατροπή Timestamp σε datetime για σωστό sorting
-                truck_logs['Timestamp'] = pd.to_datetime(truck_logs['Timestamp'])
-                truck_logs = truck_logs.sort_values('Timestamp', ascending=True)
+                # Παίρνουμε τα τελευταία 5 σημεία για τη γραμμή
+                last_5_df = truck_logs.tail(5)
                 
-                # Κράτα τα τελευταία 5 για τον πίνακα (σε φθίνουσα σειρά)
-                last_5_points = truck_logs.tail(5).sort_values('Timestamp', ascending=False)
-                
-                # 3. Metrics (Τελευταίο Στίγμα)
-                last_pos = truck_logs.iloc[-1]
-                c1, c2 = st.columns(2)
-                c1.metric("Τελευταία Ενημέρωση", last_pos['Timestamp'].strftime('%H:%M:%S'))
-                c2.metric("Κατάσταση", "Εν Κινήσει")
+                # Προετοιμασία δεδομένων για το PathLayer (μορφή [[lon, lat], [lon, lat]])
+                path_data = [
+                    {
+                        "path": last_5_df[['Longitude', 'Latitude']].values.tolist(),
+                        "name": plate,
+                        "color": [0, 123, 255] # Alumil Blue
+                    }
+                ]
 
-                # 4. Σχεδίαση Διαδρομής (Route)
-                # Χρησιμοποιούμε το st.map για τα σημεία και το st.line_chart για την "τάση" 
-                # ή το pydeck για πραγματική γραμμή διαδρομής
-                st.subheader("🗺️ Διαδρομή Οχήματος")
-                map_data = truck_logs[['Latitude', 'Longitude']].rename(columns={'Latitude': 'lat', 'Longitude': 'lon'})
-                st.map(map_data, zoom=12)
+                # Ορισμός του Layer για τη γραμμή
+                layer = pdk.Layer(
+                    "PathLayer",
+                    path_data,
+                    get_path="path",
+                    get_width=5,
+                    get_color="color",
+                    width_min_pixels=3,
+                    pickable=True,
+                )
 
-                # 5. Πίνακας με τα 5 τελευταία σημεία
-                st.subheader("📋 Τελευταία 5 Στίγματα")
-                st.table(last_5_points[['Timestamp', 'Latitude', 'Longitude']].assign(
-                    Timestamp=lambda x: x['Timestamp'].dt.strftime('%d/%m %H:%M')
+                # Ορισμός της αρχικής προβολής (κεντράρισμα στο τελευταίο σημείο)
+                view_state = pdk.ViewState(
+                    latitude=last_5_df['Latitude'].iloc[-1],
+                    longitude=last_5_df['Longitude'].iloc[-1],
+                    zoom=13,
+                    pitch=0
+                )
+
+                # Εμφάνιση του χάρτη
+                st.pydeck_chart(pdk.Deck(
+                    layers=[layer],
+                    initial_view_state=view_state,
+                    map_style="mapbox://styles/mapbox/light-v9", # Καθαρό industrial look
+                    tooltip={"text": "Όχημα: {name}"}
                 ))
 
-                st.success(f"Η διαδρομή του {plate} ανανεώθηκε.")
+                # Πίνακας για επιβεβαίωση
+                st.subheader("📋 Τελευταία 5 Στίγματα")
+                st.dataframe(last_5_df.sort_values('Timestamp', ascending=False)[['Timestamp', 'Latitude', 'Longitude']], hide_index=True)
+                
             else:
-                st.warning(f"Δεν βρέθηκαν δεδομένα για την πινακίδα: {plate}")
-        else:
-            st.error("Το Transit_Log είναι άδειο.")
-            
+                st.warning(f"Δεν βρέθηκαν δεδομένα για {plate}")
     except Exception as e:
-        st.error(f"Σφάλμα: {e}")
-    
-    st.divider()
-    st.caption("Powered by Alumil Logistics System")
+        st.error(f"Error: {e}")
