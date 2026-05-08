@@ -5,6 +5,9 @@ import urllib.parse
 import time
 from geopy.distance import geodesic
 
+LOG_URL = "https://docs.google.com/spreadsheets/d/1NSB1XvK8PX0DOAK5OgjDGQxvHpdL1jVSR_nzovJfjuM/edit"
+
+
 @st.cache_data(ttl=86400)
 def geocode_address(street, city):
     if not street or str(street).lower() in ['nan', 'none', '']: return None, None
