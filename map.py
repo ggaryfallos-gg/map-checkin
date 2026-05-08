@@ -56,7 +56,7 @@ def main():
     if "track" in params:
         # Αν υπάρχει το ?track=KIE6761 στο URL
         plate_to_track = params["track"]
-        render_public_tracking(plate_to_track) # Καλούμε τη νέα συνάρτηση
+        render_public_tracking(plate_to_track, conn, LOG_URL) # Καλούμε τη νέα συνάρτηση
         st.stop() # Σταματάμε το υπόλοιπο app για να μη βλέπει μενού ο πελάτης
 
 
