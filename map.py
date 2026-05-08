@@ -8,6 +8,8 @@ from driver_ui import render_driver_terminal
 from admin_ui import render_admin_dashboard
 from utils import render_public_tracking
 
+# 1. Ορισμός του connection κεντρικά
+conn = st.connection("gsheets", type=GSheetsConnection)
 def main():
     # 1. Έλεγχος για Live Tracking Mode
     params = st.query_params
