@@ -64,38 +64,54 @@ def main():
     if not check_password(): st.stop()
     
     if st.session_state.password_correct:
-    # 1. Φόρτωση βασικών δεδομένων
+        # 1. Φόρτωση Δεδομένων
         fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL)
-    
-        # 2. Δυναμική Φόρτωση Fleet από το νέο φύλλο "Plates"
-        try:
-            df_plates = conn.read(spreadsheet=LOG_URL, worksheet="Plates", ttl=300)
-            # Καθαρισμός κενών για να ταυτίζονται με το tracking URL
-            fleet_list = sorted(df_plates.iloc[:, 0].astype(str).str.replace(" ", "").tolist())
-        except Exception:
-            fleet_list = [] # Fallback σε άδεια λίστα αν αποτύχει
-    
-        # 3. Sidebar Φίλτρο (Single Source of Truth)
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("🚚 Fleet Management")
         
-        # Αν ο χρήστης είναι Admin, μπορεί να θέλει να βλέπει "Όλα"
-        filter_options = ["Όλα"] + fleet_list
-        selected_plate = st.sidebar.selectbox(
-            "Επιλογή Πινακίδας", 
-            options=filter_options,
-            index=0 if st.session_state.filter_plate == "Όλα" else filter_options.index(st.session_state.filter_plate) if st.session_state.filter_plate in filter_options else 0
-        )
-        st.session_state.filter_plate = selected_plate
+        # --- SIDEBAR ORGANIZATION ---
+        with st.sidebar:
+            # LOGOUT & DATE
+            col1, col2 = st.columns([1, 1])
+            if col1.button("🔒 Log Out"):
+                st.session_state.password_correct = False
+                st.rerun()
+            col2.write(f"📅 {GR_TIME.strftime('%d/%m/%Y')}")
+            
+            st.markdown("---")
+            
+            # MENU SELECTOR
+            app_mode = st.radio("📑 Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
+            
+            st.markdown("---")
+            st.subheader("🔍 Φίλτρα Στόλου")
+            
+            # ΦΟΡΤΩΣΗ ΠΙΝΑΚΙΔΩΝ ΑΠΟ ΤΟ ΦΥΛΛΟ "Plates"
+            try:
+                df_plates = conn.read(spreadsheet=LOG_URL, worksheet="Plates", ttl=300)
+                df_plates.columns = [c.strip() for c in df_plates.columns]
+                # Υποθέτουμε ότι έχεις στήλη 'Type' (Own/External) και 'Plate'
+                own_fleet = df_plates[df_plates['Type'] == 'Own']['Plate'].str.replace(" ", "").tolist()
+                ext_fleet = df_plates[df_plates['Type'] != 'Own']['Plate'].str.replace(" ", "").tolist()
+            except:
+                own_fleet, ext_fleet = [], []
     
-        # 4. Routing στα UIs
-        app_mode = st.sidebar.radio("Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
-        
+            # ΦΙΛΤΡΟ ΙΔΙΟΚΤΗΤΑ Ή ΟΧΙ
+            fleet_type = st.radio("Τύπος Στόλου", ["Δικά μας (Own)", "Εξωτερικά", "Όλα"], index=2)
+            
+            # ΔΥΝΑΜΙΚΗ ΛΙΣΤΑ ΠΙΝΑΚΙΔΩΝ
+            if fleet_type == "Δικά μας (Own)":
+                current_options = ["Όλα"] + sorted(own_fleet)
+            elif fleet_type == "Εξωτερικά":
+                current_options = ["Όλα"] + sorted(ext_fleet)
+            else:
+                current_options = ["Όλα"] + sorted(own_fleet + ext_fleet)
+    
+            selected_plate = st.selectbox("Επιλογή Πινακίδας", options=current_options)
+            st.session_state.filter_plate = selected_plate
+    
+        # --- MAIN CONTENT ROUTING ---
         if app_mode == "🚛 Driver Terminal":
-            # Στο Driver Terminal ίσως θέλεις να περιορίσεις τα data βάσει του selected_plate
             render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
         else:
-            # Στο Admin Dashboard περνάμε το selected_plate για αυτόματο φιλτράρισμα
             render_admin_dashboard(all_data, conn, LOG_URL)
 
 # --- ΕΚΤΕΛΕΣΗ ΤΗΣ ΜΑΙΝ ---
