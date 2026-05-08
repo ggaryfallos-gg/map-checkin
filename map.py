@@ -8,16 +8,7 @@ from driver_ui import render_driver_terminal
 from admin_ui import render_admin_dashboard
 from utils import render_public_tracking
 
-# 1. Ορισμός του connection κεντρικά
-conn = st.connection("gsheets", type=GSheetsConnection)
-def main():
-    # 1. Έλεγχος για Live Tracking Mode
-    params = st.query_params
-    if "track" in params:
-        # Αν υπάρχει το ?track=KIE6761 στο URL
-        plate_to_track = params["track"]
-        render_public_tracking(plate_to_track) # Καλούμε τη νέα συνάρτηση
-        st.stop() # Σταματάμε το υπόλοιπο app για να μη βλέπει μενού ο πελάτης
+
 
 
 # --- CONFIG ---
@@ -59,6 +50,19 @@ def check_password():
             st.rerun()
     return False
 
+# 1. Ορισμός του connection κεντρικά
+conn = st.connection("gsheets", type=GSheetsConnection)
+def main():
+    # 1. Έλεγχος για Live Tracking Mode
+    params = st.query_params
+    if "track" in params:
+        # Αν υπάρχει το ?track=KIE6761 στο URL
+        plate_to_track = params["track"]
+        render_public_tracking(plate_to_track) # Καλούμε τη νέα συνάρτηση
+        st.stop() # Σταματάμε το υπόλοιπο app για να μη βλέπει μενού ο πελάτης
+
+
+
 if not check_password(): st.stop()
 
 if st.session_state.password_correct:
@@ -71,4 +75,8 @@ if st.session_state.password_correct:
         render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
     else:
         render_admin_dashboard(all_data, conn, LOG_URL)
+
+# --- ΕΚΤΕΛΕΣΗ ΤΗΣ ΜΑΙΝ ---
+if __name__ == "__main__":
+    main()
 
