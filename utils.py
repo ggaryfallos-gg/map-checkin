@@ -88,7 +88,7 @@ def render_public_tracking(plate, _conn, log_url):
             if not truck_logs.empty:
                 truck_logs['Timestamp'] = pd.to_datetime(truck_logs['Timestamp'])
                 truck_logs = truck_logs.sort_values('Timestamp')
-                last_5_df = truck_logs.tail(5)
+                last_5_df = truck_logs.tail(10)
                 
                 # --- ΕΔΩ ΟΡΙΖΟΝΤΑΙ ΤΑ LAYERS ---
                 path_data = [{"path": last_5_df[['Longitude', 'Latitude']].values.tolist(), "color": [0, 102, 204, 255]}]
