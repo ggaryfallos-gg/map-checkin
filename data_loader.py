@@ -55,3 +55,16 @@ def load_full_data(_conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_
     fleet_summary = pd.merge(unique_routes, counts, on=['Plate_Clean', 'Loading_Date'], how='left').fillna(0)
     
     return fleet_summary, df
+
+def get_fleet_from_gsheets(conn, log_url):
+    try:
+        # Διάβασμα του φύλλου Plates
+        df_plates = conn.read(spreadsheet=log_url, worksheet="Plates", ttl=300) # 5 λεπτά cache
+        if df_plates is not None and not df_plates.empty:
+            # Καθαρισμός κενών και μετατροπή σε λίστα
+            # Υποθέτουμε ότι η στήλη λέγεται 'Plate'
+            plates = df_plates.iloc[:, 0].astype(str).str.replace(" ", "").unique().tolist()
+            return sorted(plates)
+        return []
+    except Exception:
+        return []
