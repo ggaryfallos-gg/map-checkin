@@ -112,17 +112,35 @@ def main():
     
     # --- MAIN CONTENT ROUTING ---
     if app_mode == "🚛 Driver Terminal":
-        # Φιλτράρουμε το DataFrame fleet_info βάσει των λιστών own_fleet/ext_fleet
-        if fleet_type == "Δικά μας (Own)":
-            # Κρατάμε μόνο τις σειρές που η πινακίδα τους είναι στην own_fleet
-            filtered_df = fleet_info[fleet_info['Truck License Plate'].str.replace(" ", "").isin(own_fleet)]
-        elif fleet_type == "Εξωτερικά":
-            filtered_df = fleet_info[fleet_info['Truck License Plate'].str.replace(" ", "").isin(ext_fleet)]
-        else:
-            filtered_df = fleet_info
+        # 1. Κανονικοποίηση πινακίδων στο fleet_info για τη σύγκριση
+        # Δημιουργούμε μια προσωρινή στήλη χωρίς κενά
+        fleet_info_clean = fleet_info.copy()
+        fleet_info_clean['temp_plate'] = fleet_info_clean['Truck License Plate'].astype(str).str.replace(" ", "").str.upper()
 
-        # Περνάμε το φιλτραρισμένο DataFrame
-        render_driver_terminal(all_data, filtered_df, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+        # 2. Φιλτράρισμα βάσει τύπου στόλου
+        if fleet_type == "Δικά μας (Own)":
+            search_list = [p.upper() for p in own_fleet]
+            filtered_df = fleet_info_clean[fleet_info_clean['temp_plate'].isin(search_list)]
+        elif fleet_type == "Εξωτερικά":
+            search_list = [p.upper() for p in ext_fleet]
+            filtered_df = fleet_info_clean[fleet_info_clean['temp_plate'].isin(search_list)]
+        else:
+            filtered_df = fleet_info_clean
+
+        # 3. Επιπλέον φιλτράρισμα αν έχει επιλεγεί συγκεκριμένη πινακίδα στο Selectbox
+        if selected_plate != "Όλα":
+            target_p = selected_plate.replace(" ", "").upper()
+            filtered_df = filtered_df[filtered_df['temp_plate'] == target_p]
+
+        # Αφαιρούμε την προσωρινή στήλη πριν το στείλουμε στο UI
+        final_df = filtered_df.drop(columns=['temp_plate'])
+
+        if final_df.empty:
+            st.warning("⚠️ Δεν βρέθηκαν δεδομένα για τις επιλογές σας.")
+            # Fallback στο αρχικό για να μην κρασάρει το UI
+            render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+        else:
+            render_driver_terminal(all_data, final_df, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
     
     else:
         render_admin_dashboard(all_data, conn, LOG_URL)
