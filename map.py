@@ -52,53 +52,57 @@ def check_password():
     return False
 
 def main():
-    # 1. Έλεγχος για Live Tracking Mode
+    # 1. Live Tracking Mode (Bypass)
     params = st.query_params
     if "track" in params:
-        # Αν υπάρχει το ?track=KIE6761 στο URL
-        plate_to_track = params["track"]
-        render_public_tracking(plate_to_track, conn, LOG_URL) # Καλούμε τη νέα συνάρτηση
-        st.stop() # Σταματάμε το υπόλοιπο app για να μη βλέπει μενού ο πελάτης
+        render_public_tracking(params["track"], conn, LOG_URL)
+        st.stop()
 
-
-
-    if not check_password(): st.stop()
+    # 2. Login
+    if not check_password():
+        st.stop()
     
-    if st.session_state.password_correct:
-        # 1. Φόρτωση Δεδομένων
-        fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL)
+    # 3. Φόρτωση Δεδομένων
+    fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL)
+    
+    # --- SIDEBAR ---
+    with st.sidebar:
+        col1, col2 = st.columns([1, 1])
+        if col1.button("🔒 Log Out"):
+            st.session_state.password_correct = False
+            st.rerun()
         
-        # --- SIDEBAR ---
-        with st.sidebar:
-            col1, col2 = st.columns([1, 1])
-            if col1.button("🔒 Log Out"):
-                st.session_state.password_correct = False
-                st.rerun()
+        import datetime
+        now_gr = datetime.datetime.now(GR_TIME)
+        col2.write(f"📅 {now_gr.strftime('%d/%m/%Y')}")
+        
+        st.markdown("---")
+        app_mode = st.radio("📑 Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
+        
+        st.markdown("---")
+        st.subheader("🔍 Φιλτράρισμα")
+        
+        # Καθαρό φίλτρο πινακίδας
+        all_plates = ["Όλα"] + sorted([str(p) for p in fleet_info['Truck License Plate'].unique()])
+        
+        # Χρησιμοποιούμε το index για να κρατάμε την επιλογή σωστά
+        if st.session_state.filter_plate not in all_plates:
+            st.session_state.filter_plate = "Όλα"
             
-            import datetime
-            now_gr = datetime.datetime.now(GR_TIME)
-            col2.write(f"📅 {now_gr.strftime('%d/%m/%Y')}")
-            
-            st.markdown("---")
-            app_mode = st.radio("📑 Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
-            
-            st.markdown("---")
-            st.subheader("🔍 Φίλτρα")
-            
-            # ΠΑΙΡΝΟΥΜΕ ΤΙΣ ΠΙΝΑΚΙΔΕΣ ΚΑΙ ΤΙΣ ΚΑΝΟΥΜΕ ΟΛΕΣ STR ΠΡΙΝ ΤΟ SORT
-            raw_plates = fleet_info['Truck License Plate'].dropna().unique().tolist()
-            # Μετατροπή σε string για να αποφύγουμε το σφάλμα int vs str
-            clean_plates = sorted([str(p) for p in raw_plates])
-            
-            plates_list = ["Όλα"] + clean_plates
-            selected_plate = st.selectbox("Επιλογή Πινακίδας", options=plates_list)
-            st.session_state.filter_plate = selected_plate
-    
-        # --- MAIN ROUTING ---
-        if app_mode == "🚛 Driver Terminal":
-            render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
-        else:
-            render_admin_dashboard(all_data, conn, LOG_URL)
+        selected_plate = st.selectbox(
+            "Επιλογή Πινακίδας", 
+            options=all_plates,
+            index=all_plates.index(st.session_state.filter_plate)
+        )
+        st.session_state.filter_plate = selected_plate
+
+    # --- ROUTING ---
+    if app_mode == "🚛 Driver Terminal":
+        # Στέλνουμε το ΜΑΜΑ data, χωρίς φίλτρα εδώ. 
+        # Το driver_ui θα διαβάσει το st.session_state.filter_plate και θα κάνει τα δικά του.
+        render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+    else:
+        render_admin_dashboard(all_data, conn, LOG_URL)
 
 
 # --- ΕΚΤΕΛΕΣΗ ΤΗΣ ΜΑΙΝ ---
