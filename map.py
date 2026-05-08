@@ -110,18 +110,20 @@ def main():
             selected_plate = st.selectbox("Επιλογή Πινακίδας", options=current_options)
             st.session_state.filter_plate = selected_plate
     
-        # --- MAIN CONTENT ROUTING ---
-        # --- MAIN CONTENT ROUTING ---
+    # --- MAIN CONTENT ROUTING ---
     if app_mode == "🚛 Driver Terminal":
-        # Φιλτράρισμα του fleet_info ώστε να δείχνει μόνο τον επιλεγμένο τύπο στόλου
+        # Φιλτράρουμε το DataFrame fleet_info βάσει των λιστών own_fleet/ext_fleet
         if fleet_type == "Δικά μας (Own)":
-            filtered_fleet = [f for f in fleet_info if f.replace(" ", "") in own_fleet]
+            # Κρατάμε μόνο τις σειρές που η πινακίδα τους είναι στην own_fleet
+            filtered_df = fleet_info[fleet_info['Truck License Plate'].str.replace(" ", "").isin(own_fleet)]
         elif fleet_type == "Εξωτερικά":
-            filtered_fleet = [f for f in fleet_info if f.replace(" ", "") in ext_fleet]
+            filtered_df = fleet_info[fleet_info['Truck License Plate'].str.replace(" ", "").isin(ext_fleet)]
         else:
-            filtered_fleet = fleet_info
-        # Περνάμε το filtered_fleet αντί για το σκέτο fleet_info
-        render_driver_terminal(all_data, filtered_fleet, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)    
+            filtered_df = fleet_info
+
+        # Περνάμε το φιλτραρισμένο DataFrame
+        render_driver_terminal(all_data, filtered_df, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+    
     else:
         render_admin_dashboard(all_data, conn, LOG_URL)
 
