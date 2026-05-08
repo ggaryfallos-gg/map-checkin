@@ -98,38 +98,6 @@ def main():
         render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
     else:
         render_admin_dashboard(all_data, conn, LOG_URL)
-    
-    # --- MAIN CONTENT ROUTING ---
-    # --- MAIN CONTENT ROUTING ---
-    if app_mode == "🚛 Driver Terminal":
-        # 1. Προετοιμασία των λιστών (χωρίς κενά για τη σύγκριση)
-        clean_own = [p.replace(" ", "").upper() for p in own_fleet]
-        clean_ext = [p.replace(" ", "").upper() for p in ext_fleet]
-
-        # 2. Φιλτράρισμα του fleet_info μόνο αν ΔΕΝ είναι στο "Όλα"
-        # Σημαντικό: Κάνουμε copy για να μην πειράξουμε τα αρχικά δεδομένα στη μνήμη
-        display_df = fleet_info.copy()
-        
-        if fleet_type == "Δικά μας (Own)":
-            display_df = display_df[display_df['Truck License Plate'].str.replace(" ", "").str.upper().isin(clean_own)]
-        elif fleet_type == "Εξωτερικά":
-            display_df = display_df[display_df['Truck License Plate'].str.replace(" ", "").str.upper().isin(clean_ext)]
-
-        # 3. Αν έχει επιλεγεί συγκεκριμένη πινακίδα από το sidebar, φιλτράρουμε περαιτέρω
-        if st.session_state.filter_plate != "Όλα":
-            target_clean = st.session_state.filter_plate.replace(" ", "").upper()
-            display_df = display_df[display_df['Truck License Plate'].str.replace(" ", "").str.upper() == target_clean]
-
-        # 4. Έλεγχος αν το αποτέλεσμα είναι κενό
-        if display_df.empty:
-            st.info("ℹ️ Δεν βρέθηκαν δρομολόγια για τις συγκεκριμένες επιλογές.")
-            # Στέλνουμε το κανονικό fleet_info για να μπορεί ο χρήστης να επιλέξει κάτι άλλο
-            render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
-        else:
-            render_driver_terminal(all_data, display_df, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
-
-    else:
-        render_admin_dashboard(all_data, conn, LOG_URL)
 
 
 # --- ΕΚΤΕΛΕΣΗ ΤΗΣ ΜΑΙΝ ---
