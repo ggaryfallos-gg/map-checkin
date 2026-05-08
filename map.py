@@ -50,8 +50,6 @@ def check_password():
             st.rerun()
     return False
 
-# 1. Ορισμός του connection κεντρικά
-conn = st.connection("gsheets", type=GSheetsConnection)
 def main():
     # 1. Έλεγχος για Live Tracking Mode
     params = st.query_params
