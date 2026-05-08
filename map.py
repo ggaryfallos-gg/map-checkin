@@ -80,9 +80,6 @@ def main():
         app_mode = st.radio("📑 Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
         
         st.markdown("---")
-        st.subheader("🔍 Φιλτράρισμα")
-
-        st.markdown("---")
         st.subheader("🔍 Φιλτράρισμα Στόλου")
         
         # 1. Φόρτωση του "Master" αρχείου πινακίδων από το GSheets
@@ -118,20 +115,6 @@ def main():
             "Επιλογή Πινακίδας", 
             options=final_options,
             index=final_options.index(st.session_state.filter_plate)
-        )
-        st.session_state.filter_plate = selected_plate
-        
-        # Καθαρό φίλτρο πινακίδας
-        all_plates = ["Όλα"] + sorted([str(p) for p in fleet_info['Truck License Plate'].unique()])
-        
-        # Χρησιμοποιούμε το index για να κρατάμε την επιλογή σωστά
-        if st.session_state.filter_plate not in all_plates:
-            st.session_state.filter_plate = "Όλα"
-            
-        selected_plate = st.selectbox(
-            "Επιλογή Πινακίδας", 
-            options=all_plates,
-            index=all_plates.index(st.session_state.filter_plate)
         )
         st.session_state.filter_plate = selected_plate
 
