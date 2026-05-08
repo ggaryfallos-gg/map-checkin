@@ -74,17 +74,7 @@ def get_cached_geodesic(p1, p2):
 
 def render_public_tracking(plate, _conn, log_url):
     st.title(f"📍 Live Route: {plate}")
-    # Εμφάνιση του χάρτη με ελεύθερο στυλ χάρτη (Carto Light)
-    st.pydeck_chart(pdk.Deck(
-    layers=layers,
-    initial_view_state=view_state,
-    # Χρησιμοποιούμε CartoDB Light που δεν θέλει Token
-    map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-    tooltip={
-        "html": "<b>Πινακίδα:</b> {Plate}<br/><b>Ώρα:</b> {Timestamp}",
-        "style": {"color": "white"}
-    }
-))
+    
     
     try:
         df = _conn.read(spreadsheet=log_url, worksheet="Transit_Log", ttl=0)
@@ -141,6 +131,17 @@ def render_public_tracking(plate, _conn, log_url):
                     zoom=12,
                     pitch=0
                 )
+                # Εμφάνιση του χάρτη με ελεύθερο στυλ χάρτη (Carto Light)
+                st.pydeck_chart(pdk.Deck(
+                layers=layers,
+                initial_view_state=view_state,
+                # Χρησιμοποιούμε CartoDB Light που δεν θέλει Token
+                map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+                tooltip={
+                    "html": "<b>Πινακίδα:</b> {Plate}<br/><b>Ώρα:</b> {Timestamp}",
+                    "style": {"color": "white"}
+                }
+                ))
 
                 # Εμφάνιση του χάρτη με υπόβαθρο δρόμων
                 st.pydeck_chart(pdk.Deck(
