@@ -18,9 +18,6 @@ def main():
         st.stop() # Σταματάμε το υπόλοιπο app για να μη βλέπει μενού ο πελάτης
 
 
-
-
-
 # --- CONFIG ---
 st.set_page_config(page_title="Alumil Hub v60", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
