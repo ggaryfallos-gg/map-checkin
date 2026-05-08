@@ -97,7 +97,7 @@ def render_public_tracking(plate, _conn, log_url):
                 layers = [
                     pdk.Layer(
                         "PathLayer", path_data, get_path="path", 
-                        get_width=20, get_color="color", width_min_pixels=3
+                        get_width=10, get_color="color", width_min_pixels=3
                     ),
                     pdk.Layer(
                         "ScatterplotLayer", current_pos, 
