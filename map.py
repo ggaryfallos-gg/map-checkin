@@ -113,39 +113,32 @@ def main():
     # --- MAIN CONTENT ROUTING ---
     # --- MAIN CONTENT ROUTING ---
     if app_mode == "🚛 Driver Terminal":
-        # 1. Προετοιμασία λιστών για σύγκριση (όλα χωρίς κενά και κεφαλαία)
+        # 1. Προετοιμασία των λιστών (χωρίς κενά για τη σύγκριση)
         clean_own = [p.replace(" ", "").upper() for p in own_fleet]
         clean_ext = [p.replace(" ", "").upper() for p in ext_fleet]
 
-        # 2. Φιλτράρισμα του fleet_info
-        # Δημιουργούμε ένα mask (φίλτρο) βασισμένο στην καθαρή μορφή της στήλης
-        def is_in_fleet(plate_val, target_list):
-            clean_val = str(plate_val).replace(" ", "").upper()
-            return clean_val in target_list
-
+        # 2. Φιλτράρισμα του fleet_info μόνο αν ΔΕΝ είναι στο "Όλα"
+        # Σημαντικό: Κάνουμε copy για να μην πειράξουμε τα αρχικά δεδομένα στη μνήμη
+        display_df = fleet_info.copy()
+        
         if fleet_type == "Δικά μας (Own)":
-            mask = fleet_info['Truck License Plate'].apply(lambda x: is_in_fleet(x, clean_own))
-            filtered_df = fleet_info[mask]
+            display_df = display_df[display_df['Truck License Plate'].str.replace(" ", "").str.upper().isin(clean_own)]
         elif fleet_type == "Εξωτερικά":
-            mask = fleet_info['Truck License Plate'].apply(lambda x: is_in_fleet(x, clean_ext))
-            filtered_df = fleet_info[mask]
-        else:
-            filtered_df = fleet_info
+            display_df = display_df[display_df['Truck License Plate'].str.replace(" ", "").str.upper().isin(clean_ext)]
 
-        # 3. Επιπλέον φιλτράρισμα αν έχει επιλεγεί συγκεκριμένη πινακίδα από το Selectbox
-        if selected_plate != "Όλα":
-            clean_selected = selected_plate.replace(" ", "").upper()
-            mask_selected = filtered_df['Truck License Plate'].apply(lambda x: str(x).replace(" ", "").upper() == clean_selected)
-            filtered_df = filtered_df[mask_selected]
+        # 3. Αν έχει επιλεγεί συγκεκριμένη πινακίδα από το sidebar, φιλτράρουμε περαιτέρω
+        if st.session_state.filter_plate != "Όλα":
+            target_clean = st.session_state.filter_plate.replace(" ", "").upper()
+            display_df = display_df[display_df['Truck License Plate'].str.replace(" ", "").str.upper() == target_clean]
 
-        # 4. Routing με έλεγχο αποτελεσμάτων
-        if filtered_df.empty and (fleet_type != "Όλα" or selected_plate != "Όλα"):
-            st.warning("⚠️ Δεν βρέθηκαν δεδομένα. Οι πινακίδες στο 'Plates' πρέπει να ταιριάζουν με τα δρομολόγια (έστω και χωρίς κενά).")
-            # Δείχνουμε τα πάντα ως fallback για να μην "κολλήσει" ο χρήστης
+        # 4. Έλεγχος αν το αποτέλεσμα είναι κενό
+        if display_df.empty:
+            st.info("ℹ️ Δεν βρέθηκαν δρομολόγια για τις συγκεκριμένες επιλογές.")
+            # Στέλνουμε το κανονικό fleet_info για να μπορεί ο χρήστης να επιλέξει κάτι άλλο
             render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
         else:
-            render_driver_terminal(all_data, filtered_df, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
-    
+            render_driver_terminal(all_data, display_df, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+
     else:
         render_admin_dashboard(all_data, conn, LOG_URL)
 
