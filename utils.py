@@ -71,63 +71,56 @@ def get_cached_geodesic(p1, p2):
     return geodesic(p1, p2).km
 
 
-def render_public_tracking(plate, _conn,log_url):
-    st.set_page_config(page_title=f"Live Tracking - {plate}", layout="centered")
+def render_public_tracking(plate, _conn, log_url):
+    st.title(f"📍 Live Tracking: {plate}")
     
-    # Industrial Style Header
-    st.title(f"📍 Παρακολούθηση Οχήματος: {plate}")
-    
-    # Διάβασμα του Transit_Log (χωρίς cache για να είναι live)
     try:
-        # 1. Διάβασμα των logs
+        # 1. Ανάγνωση δεδομένων
         df = _conn.read(spreadsheet=log_url, worksheet="Transit_Log", ttl=0)
         
         if df is not None and not df.empty:
-            # Καθαρισμός επικεφαλίδων (για σιγουριά)
             df.columns = [c.strip() for c in df.columns]
             
-            # 2. Φιλτράρισμα για την πινακίδα (Προσοχή: strip για να πιάσει KIE 6761 και KIE6761)
-            # Δημιουργούμε μια προσωρινή στήλη χωρίς κενά για το search
+            # 2. Φιλτράρισμα και Καθαρισμός Πινακίδας
             df['SearchPlate'] = df['Plate'].str.replace(' ', '')
             target_plate = plate.replace(' ', '')
-            
-            truck_logs = df[df['SearchPlate'] == target_plate].tail(1)
+            truck_logs = df[df['SearchPlate'] == target_plate].copy()
             
             if not truck_logs.empty:
-                last_pos = truck_logs.iloc[0]
+                # Μετατροπή Timestamp σε datetime για σωστό sorting
+                truck_logs['Timestamp'] = pd.to_datetime(truck_logs['Timestamp'])
+                truck_logs = truck_logs.sort_values('Timestamp', ascending=True)
                 
-                # 3. Εμφάνιση Metrics
+                # Κράτα τα τελευταία 5 για τον πίνακα (σε φθίνουσα σειρά)
+                last_5_points = truck_logs.tail(5).sort_values('Timestamp', ascending=False)
+                
+                # 3. Metrics (Τελευταίο Στίγμα)
+                last_pos = truck_logs.iloc[-1]
                 c1, c2 = st.columns(2)
-                # Χρησιμοποιούμε 'Timestamp' (όπως είναι στο Sheet σου)
-                c1.metric("Τελευταίο Στίγμα", str(last_pos['Timestamp']))
+                c1.metric("Τελευταία Ενημέρωση", last_pos['Timestamp'].strftime('%H:%M:%S'))
                 c2.metric("Κατάσταση", "Εν Κινήσει")
-                
-                # 4. Χάρτης με τις στήλες Latitude & Longitude
-                if 'Latitude' in last_pos and 'Longitude' in last_pos:
-                    import pandas as pd
-                    try:
-                        lat = float(last_pos['Latitude'])
-                        lon = float(last_pos['Longitude'])
-                        map_df = pd.DataFrame({'lat': [lat], 'lon': [lon]})
-                        
-                        # Εμφάνιση Χάρτη
-                        st.map(map_df, zoom=12)
-                        
-                        st.success(f"Το όχημα {plate} εντοπίστηκε επιτυχώς.")
-                    except Exception as e:
-                        st.warning(f"Πρόβλημα στις συντεταγμένες: {e}")
-                else:
-                    st.warning("Δεν βρέθηκαν γεωγραφικά δεδομένα (Latitude/Longitude).")
+
+                # 4. Σχεδίαση Διαδρομής (Route)
+                # Χρησιμοποιούμε το st.map για τα σημεία και το st.line_chart για την "τάση" 
+                # ή το pydeck για πραγματική γραμμή διαδρομής
+                st.subheader("🗺️ Διαδρομή Οχήματος")
+                map_data = truck_logs[['Latitude', 'Longitude']].rename(columns={'Latitude': 'lat', 'Longitude': 'lon'})
+                st.map(map_data, zoom=12)
+
+                # 5. Πίνακας με τα 5 τελευταία σημεία
+                st.subheader("📋 Τελευταία 5 Στίγματα")
+                st.table(last_5_points[['Timestamp', 'Latitude', 'Longitude']].assign(
+                    Timestamp=lambda x: x['Timestamp'].dt.strftime('%d/%m %H:%M')
+                ))
+
+                st.success(f"Η διαδρομή του {plate} ανανεώθηκε.")
             else:
-                st.warning(f"Δεν βρέθηκαν πρόσφατα logs για την πινακίδα: {plate}")
+                st.warning(f"Δεν βρέθηκαν δεδομένα για την πινακίδα: {plate}")
         else:
-            st.error("Το αρχείο καταγραφής (Transit_Log) είναι άδειο.")
+            st.error("Το Transit_Log είναι άδειο.")
             
     except Exception as e:
-        st.error(f"Σφάλμα ανάγνωσης δεδομένων: {e}")
-        # Debugging: Δείξε μας τι διαβάζει το app
-        if 'df' in locals():
-            st.write("Στήλες που βρέθηκαν στο Sheet:", list(df.columns))
+        st.error(f"Σφάλμα: {e}")
     
     st.divider()
     st.caption("Powered by Alumil Logistics System")
