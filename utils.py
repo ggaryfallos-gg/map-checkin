@@ -102,7 +102,7 @@ def render_public_tracking(plate, _conn, log_url):
                     pdk.Layer(
                         "ScatterplotLayer", current_pos, 
                         get_position=['Longitude', 'Latitude'], 
-                        get_color=[255, 0, 0], get_radius=100, radius_min_pixels=6
+                        get_color=[255, 0, 0], get_radius=50, radius_min_pixels=6
                     )
                 ]
 
