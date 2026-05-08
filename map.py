@@ -61,18 +61,18 @@ def main():
 
 
 
-if not check_password(): st.stop()
-
-if st.session_state.password_correct:
-    # Φόρτωση Δεδομένων
-    fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL)
+    if not check_password(): st.stop()
     
-    app_mode = st.sidebar.radio("Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
-    
-    if app_mode == "🚛 Driver Terminal":
-        render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
-    else:
-        render_admin_dashboard(all_data, conn, LOG_URL)
+    if st.session_state.password_correct:
+        # Φόρτωση Δεδομένων
+        fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL)
+        
+        app_mode = st.sidebar.radio("Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
+        
+        if app_mode == "🚛 Driver Terminal":
+            render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+        else:
+            render_admin_dashboard(all_data, conn, LOG_URL)
 
 # --- ΕΚΤΕΛΕΣΗ ΤΗΣ ΜΑΙΝ ---
 if __name__ == "__main__":
