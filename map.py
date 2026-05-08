@@ -7,6 +7,20 @@ from data_loader import load_full_data
 from driver_ui import render_driver_terminal
 from admin_ui import render_admin_dashboard
 
+
+def main():
+    # 1. Έλεγχος για Live Tracking Mode
+    params = st.query_params
+    if "track" in params:
+        # Αν υπάρχει το ?track=KIE6761 στο URL
+        plate_to_track = params["track"]
+        render_public_tracking(plate_to_track) # Καλούμε τη νέα συνάρτηση
+        st.stop() # Σταματάμε το υπόλοιπο app για να μη βλέπει μενού ο πελάτης
+
+
+
+
+
 # --- CONFIG ---
 st.set_page_config(page_title="Alumil Hub v60", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
