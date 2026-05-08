@@ -75,7 +75,6 @@ def get_cached_geodesic(p1, p2):
 def render_public_tracking(plate, _conn, log_url):
     st.title(f"📍 Live Route: {plate}")
     
-    
     try:
         df = _conn.read(spreadsheet=log_url, worksheet="Transit_Log", ttl=0)
         
@@ -84,78 +83,50 @@ def render_public_tracking(plate, _conn, log_url):
             df['SearchPlate'] = df['Plate'].str.replace(' ', '')
             target_plate = plate.replace(' ', '')
             
-            # Φιλτράρισμα και sorting βάσει χρόνου
             truck_logs = df[df['SearchPlate'] == target_plate].copy()
-            truck_logs['Timestamp'] = pd.to_datetime(truck_logs['Timestamp'])
-            truck_logs = truck_logs.sort_values('Timestamp')
             
             if not truck_logs.empty:
-                # Παίρνουμε τα τελευταία 5 σημεία
+                truck_logs['Timestamp'] = pd.to_datetime(truck_logs['Timestamp'])
+                truck_logs = truck_logs.sort_values('Timestamp')
                 last_5_df = truck_logs.tail(5)
                 
-                # 1. Δεδομένα για τη Γραμμή (Path)
-                path_data = [{
-                    "path": last_5_df[['Longitude', 'Latitude']].values.tolist(),
-                    "color": [0, 0, 255, 200] # Μπλε γραμμή
-                }]
-
-                # 2. Δεδομένα για το τρέχον σημείο (Marker)
+                # --- ΕΔΩ ΟΡΙΖΟΝΤΑΙ ΤΑ LAYERS ---
+                path_data = [{"path": last_5_df[['Longitude', 'Latitude']].values.tolist(), "color": [0, 102, 204, 255]}]
                 current_pos = last_5_df.tail(1)
 
-                # Σχεδιασμός Layers
                 layers = [
-                    # Layer 1: Η γραμμή της διαδρομής
                     pdk.Layer(
-                        "PathLayer",
-                        path_data,
-                        get_path="path",
-                        get_width=15,
-                        get_color="color",
-                        width_min_pixels=3,
+                        "PathLayer", path_data, get_path="path", 
+                        get_width=20, get_color="color", width_min_pixels=3
                     ),
-                    # Layer 2: Κόκκινη κουκκίδα στο τελευταίο στίγμα
                     pdk.Layer(
-                        "ScatterplotLayer",
-                        current_pos,
-                        get_position=['Longitude', 'Latitude'],
-                        get_color=[255, 0, 0],
-                        get_radius=100,
-                        radius_min_pixels=5,
+                        "ScatterplotLayer", current_pos, 
+                        get_position=['Longitude', 'Latitude'], 
+                        get_color=[255, 0, 0], get_radius=100, radius_min_pixels=6
                     )
                 ]
 
-                # Προβολή Χάρτη
                 view_state = pdk.ViewState(
                     latitude=current_pos['Latitude'].iloc[0],
                     longitude=current_pos['Longitude'].iloc[0],
-                    zoom=12,
-                    pitch=0
+                    zoom=12, pitch=0
                 )
-                # Εμφάνιση του χάρτη με ελεύθερο στυλ χάρτη (Carto Light)
-                st.pydeck_chart(pdk.Deck(
-                layers=layers,
-                initial_view_state=view_state,
-                # Χρησιμοποιούμε CartoDB Light που δεν θέλει Token
-                map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-                tooltip={
-                    "html": "<b>Πινακίδα:</b> {Plate}<br/><b>Ώρα:</b> {Timestamp}",
-                    "style": {"color": "white"}
-                }
-                ))
 
-                # Εμφάνιση του χάρτη με υπόβαθρο δρόμων
+                # --- ΤΟ PYDECK ΠΡΕΠΕΙ ΝΑ ΕΙΝΑΙ ΜΕΣΑ ΣΤΟ IF ΠΟΥ ΟΡΙΖΕΙ ΤΑ LAYERS ---
                 st.pydeck_chart(pdk.Deck(
                     layers=layers,
                     initial_view_state=view_state,
-                    map_style="mapbox://styles/mapbox/streets-v11", # ΕΔΩ ΕΙΝΑΙ ΟΙ ΔΡΟΜΟΙ
-                    tooltip=True
+                    map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+                    tooltip={"html": "<b>Πινακίδα:</b> {Plate}", "style": {"color": "white"}}
                 ))
-
-                # Data Table (για το efficiency)
-                st.subheader("📋 Ιστορικό Τελευταίων 5 Στιγμάτων")
+                
+                st.subheader("📋 Τελευταία 5 Στίγματα")
                 st.dataframe(last_5_df.sort_values('Timestamp', ascending=False)[['Timestamp', 'Latitude', 'Longitude']], hide_index=True)
                 
             else:
-                st.warning(f"Δεν βρέθηκαν δεδομένα για {plate}")
+                st.warning(f"Δεν βρέθηκαν στίγματα για το όχημα {plate}.")
+        else:
+            st.error("Το Transit_Log είναι άδειο.")
+
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Debug Error: {e}")
