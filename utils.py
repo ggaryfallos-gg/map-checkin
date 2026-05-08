@@ -95,7 +95,7 @@ def render_public_tracking(plate, _conn,log_url):
             
             # Map (Προαιρετικά, αν έχεις Lat/Lon στα logs)
             if 'Lat' in last_pos and 'Lon' in last_pos:
-                map_data = pd.DataFrame({'lat': [float(last_pos['Lat'])], 'lon': [float(last_pos['Lon'])]})
+                map_data = pd.DataFrame({'lat': [float(last_pos['Latitude'])], 'lon': [float(last_pos['Longitude'])]})
                 st.map(map_data)
         else:
             st.warning("Δεν υπάρχουν πρόσφατα δεδομένα για αυτό το όχημα.")
