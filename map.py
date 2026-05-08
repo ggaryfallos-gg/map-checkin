@@ -65,38 +65,38 @@ def main():
     
     if st.session_state.password_correct:
     # 1. Φόρτωση βασικών δεδομένων
-    fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL)
+        fleet_info, all_data = load_full_data(conn, SHIPMENTS_URL, DELIVERIES_URL, CUSADDRESS_URL, COORDS_URL)
     
-    # 2. Δυναμική Φόρτωση Fleet από το νέο φύλλο "Plates"
-    try:
-        df_plates = conn.read(spreadsheet=LOG_URL, worksheet="Plates", ttl=300)
-        # Καθαρισμός κενών για να ταυτίζονται με το tracking URL
-        fleet_list = sorted(df_plates.iloc[:, 0].astype(str).str.replace(" ", "").tolist())
-    except Exception:
-        fleet_list = [] # Fallback σε άδεια λίστα αν αποτύχει
-
-    # 3. Sidebar Φίλτρο (Single Source of Truth)
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🚚 Fleet Management")
+        # 2. Δυναμική Φόρτωση Fleet από το νέο φύλλο "Plates"
+        try:
+            df_plates = conn.read(spreadsheet=LOG_URL, worksheet="Plates", ttl=300)
+            # Καθαρισμός κενών για να ταυτίζονται με το tracking URL
+            fleet_list = sorted(df_plates.iloc[:, 0].astype(str).str.replace(" ", "").tolist())
+        except Exception:
+            fleet_list = [] # Fallback σε άδεια λίστα αν αποτύχει
     
-    # Αν ο χρήστης είναι Admin, μπορεί να θέλει να βλέπει "Όλα"
-    filter_options = ["Όλα"] + fleet_list
-    selected_plate = st.sidebar.selectbox(
-        "Επιλογή Πινακίδας", 
-        options=filter_options,
-        index=0 if st.session_state.filter_plate == "Όλα" else filter_options.index(st.session_state.filter_plate) if st.session_state.filter_plate in filter_options else 0
-    )
-    st.session_state.filter_plate = selected_plate
-
-    # 4. Routing στα UIs
-    app_mode = st.sidebar.radio("Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
+        # 3. Sidebar Φίλτρο (Single Source of Truth)
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("🚚 Fleet Management")
+        
+        # Αν ο χρήστης είναι Admin, μπορεί να θέλει να βλέπει "Όλα"
+        filter_options = ["Όλα"] + fleet_list
+        selected_plate = st.sidebar.selectbox(
+            "Επιλογή Πινακίδας", 
+            options=filter_options,
+            index=0 if st.session_state.filter_plate == "Όλα" else filter_options.index(st.session_state.filter_plate) if st.session_state.filter_plate in filter_options else 0
+        )
+        st.session_state.filter_plate = selected_plate
     
-    if app_mode == "🚛 Driver Terminal":
-        # Στο Driver Terminal ίσως θέλεις να περιορίσεις τα data βάσει του selected_plate
-        render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
-    else:
-        # Στο Admin Dashboard περνάμε το selected_plate για αυτόματο φιλτράρισμα
-        render_admin_dashboard(all_data, conn, LOG_URL)
+        # 4. Routing στα UIs
+        app_mode = st.sidebar.radio("Μενού", ["🚛 Driver Terminal", "📊 Admin Dashboard"])
+        
+        if app_mode == "🚛 Driver Terminal":
+            # Στο Driver Terminal ίσως θέλεις να περιορίσεις τα data βάσει του selected_plate
+            render_driver_terminal(all_data, fleet_info, conn, LOG_URL, CUSADDRESS_URL, GR_TIME)
+        else:
+            # Στο Admin Dashboard περνάμε το selected_plate για αυτόματο φιλτράρισμα
+            render_admin_dashboard(all_data, conn, LOG_URL)
 
 # --- ΕΚΤΕΛΕΣΗ ΤΗΣ ΜΑΙΝ ---
 if __name__ == "__main__":
